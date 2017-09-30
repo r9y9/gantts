@@ -4,9 +4,9 @@
 usage: train.py [options] <inputs_dir> <outputs_dir>
 
 options:
-    --type=<ty>                 vc or tts [default: vc].
-    --checkpoint-dir=<dir>      Directory where to save model checkpoints [default: checkpoints].
+    --hparams_name=<name>       Name of hyper params [default: vc].
     --hparams=<parmas>          Hyper parameters [default: ].
+    --checkpoint-dir=<dir>      Where to save models [default: checkpoints].
     --checkpoint-path-g=<name>  Restore generator from checkpoint if given.
     --checkpoint-path-d=<name>  Restore discriminator from checkpoint if given.
     --max_files=<N>             Max num files to be collected. [default: -1]
@@ -15,6 +15,7 @@ options:
     --reference-discriminator=<name>    Reference discriminator.
     --restart_epoch=<N>         Restart epoch [default: -1].
     --reset_optimizers          Reset optimizers.
+    --log-event-path=<name>     Log event path.
     -h, --help                  Show this help message and exit
 """
 from docopt import docopt
@@ -30,7 +31,7 @@ from sklearn.model_selection import train_test_split
 
 import sys
 import os
-from os.path import splitext, join
+from os.path import splitext, join, abspath
 from tqdm import tqdm
 
 import tensorboard_logger
@@ -42,9 +43,14 @@ from nnmnkwii.datasets import FileSourceDataset, FileDataSource
 from nnmnkwii.datasets import MemoryCacheDataset
 
 from in2out_highway import In2OutHighwayNet, Discriminator
-from in2out_highway import MaskedMSE, _sequence_mask
+from in2out_highway import MaskedMSELoss, sequence_mask
+import in2out_highway
 
-from hparams import hparams_debug_string, hparams_vc, hparams_tts
+from in2out_highway import multi_stream_mlpg, get_static_features
+from in2out_highway import get_static_stream_sizes
+
+import hparams
+from hparams import hparams_debug_string
 hp = None  # to be initailized later
 
 global_epoch = 0
@@ -64,7 +70,7 @@ class NPYDataSource(FileDataSource):
         npy_files = list(filter(lambda x: splitext(x)[-1] == ".npy",
                                 os.listdir(self.dirname)))
         npy_files = list(map(lambda d: join(self.dirname, d), npy_files))
-        if self.max_files is not None:
+        if self.max_files is not None and self.max_files > 0:
             npy_files = npy_files[:self.max_files]
         train_files, test_files = train_test_split(
             npy_files, test_size=test_size, random_state=random_state)
@@ -74,7 +80,7 @@ class NPYDataSource(FileDataSource):
         return np.load(path)
 
 
-class PyTorchDataset(object):
+class VCDataset(object):
     def __init__(self, X, Y, data_mean, data_std):
         self.X = X
         self.Y = Y
@@ -84,6 +90,28 @@ class PyTorchDataset(object):
     def __getitem__(self, idx):
         x = P.scale(self.X[idx], self.data_mean, self.data_std)
         y = P.scale(self.Y[idx], self.data_mean, self.data_std)
+        return x, y
+
+    def __len__(self):
+        return len(self.X)
+
+
+class TTSDataset(object):
+    def __init__(self, X, Y, X_data_min, X_data_max, Y_data_mean, Y_data_std):
+        self.X = X
+        self.Y = Y
+        self.X_data_min, self.X_data_scale = P.minmax_scale_params(
+            X_data_min, X_data_max, feature_range=(0.01, 0.99))
+        self.X_data_min = X_data_min
+        self.X_data_max = X_data_max
+        self.Y_data_mean = Y_data_mean
+        self.Y_data_std = Y_data_std
+
+    def __getitem__(self, idx):
+        x = P.minmax_scale(
+            self.X[idx], min_=self.X_data_min, scale_=self.X_data_scale,
+            feature_range=(0.01, 0.99))
+        y = P.scale(self.Y[idx], self.Y_data_mean, self.Y_data_std)
         return x, y
 
     def __len__(self):
@@ -112,10 +140,10 @@ def collate_fn(batch):
     return x_batch, y_batch, input_lengths
 
 
-def save_checkpoint(model, optimizer, epoch, checkpoint_dir):
+def save_checkpoint(model, optimizer, epoch, checkpoint_dir, name):
     checkpoint_path = join(
         checkpoint_dir, "checkpoint_epoch{}_{}.pth".format(
-            epoch, type(model).__name__))
+            epoch, name))
     torch.save({
         "state_dict": model.state_dict(),
         "optimizer": optimizer.state_dict(),
@@ -124,28 +152,58 @@ def save_checkpoint(model, optimizer, epoch, checkpoint_dir):
     print("Saved checkpoint:", checkpoint_path)
 
 
-def get_data_loaders(X, Y, data_mean, data_var):
+def get_vc_data_loaders(X, Y, data_mean, data_var):
     X_train, X_test = X["train"], X["test"]
     Y_train, Y_test = Y["train"], Y["test"]
 
     # Sequence-wise train loader
-    X_train_cache_dataset = MemoryCacheDataset(X_train)
-    Y_train_cache_dataset = MemoryCacheDataset(Y_train)
-    train_dataset = PyTorchDataset(
+    X_train_cache_dataset = MemoryCacheDataset(X_train, cache_size=hp.cache_size)
+    Y_train_cache_dataset = MemoryCacheDataset(Y_train, cache_size=hp.cache_size)
+    train_dataset = VCDataset(
         X_train_cache_dataset, Y_train_cache_dataset, data_mean, data_std)
     train_loader = data_utils.DataLoader(
         train_dataset, batch_size=hp.batch_size,
-        num_workers=hp.num_workers,
+        num_workers=hp.num_workers, pin_memory=hp.pin_memory,
         shuffle=True, collate_fn=collate_fn)
 
     # Sequence-wise test loader
-    X_test_cache_dataset = MemoryCacheDataset(X_test)
-    Y_test_cache_dataset = MemoryCacheDataset(Y_test)
-    test_dataset = PyTorchDataset(
+    X_test_cache_dataset = MemoryCacheDataset(X_test, cache_size=hp.cache_size)
+    Y_test_cache_dataset = MemoryCacheDataset(Y_test, cache_size=hp.cache_size)
+    test_dataset = VCDataset(
         X_test_cache_dataset, Y_test_cache_dataset, data_mean, data_std)
     test_loader = data_utils.DataLoader(
         test_dataset, batch_size=hp.batch_size,
-        num_workers=hp.num_workers,
+        num_workers=hp.num_workers, pin_memory=hp.pin_memory,
+        shuffle=False, collate_fn=collate_fn)
+
+    dataset_loaders = {"train": train_loader, "test": test_loader}
+    return dataset_loaders
+
+
+def get_tts_data_loaders(X, Y, X_data_min, X_data_max, Y_data_mean, Y_data_std):
+    X_train, X_test = X["train"], X["test"]
+    Y_train, Y_test = Y["train"], Y["test"]
+
+    # Sequence-wise train loader
+    X_train_cache_dataset = MemoryCacheDataset(X_train, cache_size=hp.cache_size)
+    Y_train_cache_dataset = MemoryCacheDataset(Y_train, cache_size=hp.cache_size)
+    train_dataset = TTSDataset(
+        X_train_cache_dataset, Y_train_cache_dataset,
+        X_data_min, X_data_max, Y_data_mean, Y_data_std)
+    train_loader = data_utils.DataLoader(
+        train_dataset, batch_size=hp.batch_size,
+        num_workers=hp.num_workers, pin_memory=hp.pin_memory,
+        shuffle=True, collate_fn=collate_fn)
+
+    # Sequence-wise test loader
+    X_test_cache_dataset = MemoryCacheDataset(X_test, cache_size=hp.cache_size)
+    Y_test_cache_dataset = MemoryCacheDataset(Y_test, cache_size=hp.cache_size)
+    test_dataset = TTSDataset(
+        X_test_cache_dataset, Y_test_cache_dataset,
+        X_data_min, X_data_max, Y_data_mean, Y_data_std)
+    test_loader = data_utils.DataLoader(
+        test_dataset, batch_size=hp.batch_size,
+        num_workers=hp.num_workers, pin_memory=hp.pin_memory,
         shuffle=False, collate_fn=collate_fn)
 
     dataset_loaders = {"train": train_loader, "test": test_loader}
@@ -182,7 +240,7 @@ def update_generator(model_g, model_d, optimizer_g, y_static, y_hat_static,
     T = mask.sum().data[0]
 
     # MGE loss
-    loss_mge = MaskedMSE()(y_hat_static, y_static, lengths)
+    loss_mge = MaskedMSELoss()(y_hat_static, y_static, lengths)
 
     # Adversarial loss
     if weight > 0:
@@ -202,7 +260,9 @@ def update_generator(model_g, model_d, optimizer_g, y_static, y_hat_static,
 
 def train_loop(models, optimizers, dataset_loaders, w_d=0.0,
                update_d=True, update_g=True,
-               reference_discriminator=None):
+               reference_discriminator=None,
+               stream_sizes=None,
+               has_dynamic_features=None):
     model_g, model_d = models
     optimizer_g, optimizer_d = optimizers
     if use_cuda:
@@ -212,8 +272,6 @@ def train_loop(models, optimizers, dataset_loaders, w_d=0.0,
             reference_discriminator.eval()
     model_g.train()
     model_d.train()
-
-    static_dim = model_g.static_dim
 
     E_loss_mge = 1
     E_loss_adv = 1
@@ -238,7 +296,8 @@ def train_loop(models, optimizers, dataset_loaders, w_d=0.0,
 
                 # Get sorted batch
                 x, y = x[indices], y[indices]
-                y_static = y[:, :, :static_dim]
+                y_static = get_static_features(
+                    y, len(hp.windows), stream_sizes, has_dynamic_features)
 
                 # MLPG paramgen matrix
                 R = unit_variance_mlpg_matrix(hp.windows, max_len)
@@ -256,14 +315,21 @@ def train_loop(models, optimizers, dataset_loaders, w_d=0.0,
                 total_num_frames += sorted_lengths.float().sum().data[0]
 
                 # Mask
-                mask = _sequence_mask(sorted_lengths).unsqueeze(-1)
+                mask = sequence_mask(sorted_lengths).unsqueeze(-1)
 
                 # Reset optimizers state
                 optimizer_g.zero_grad()
                 optimizer_d.zero_grad()
 
                 # Apply model (generator)
-                y_hat_static = model_g(x, R)
+                if stream_sizes is not None:
+                    assert has_dynamic_features is not None
+                    y_hat_static = multi_stream_mlpg(
+                        model_g(x, lengths=sorted_lengths),
+                        R, stream_sizes, has_dynamic_features)
+                else:
+                    # Mulistream features cannot be used in this case
+                    y_hat_static = model_g(x, R)
 
                 # Compute spoofing rate
                 if reference_discriminator is not None:
@@ -344,8 +410,7 @@ def load_checkpoint(model, optimizer, checkpoint_path):
 if __name__ == "__main__":
     args = docopt(__doc__)
     print("Command line args:\n", args)
-    ty = args["--type"]
-    hp = hparams_vc if ty == "vc" else hparams_tts
+    hp = getattr(hparams, args["--hparams_name"])
 
     # Override hyper parameters
     hp.parse(args["--hparams"])
@@ -353,6 +418,12 @@ if __name__ == "__main__":
 
     inputs_dir = args["<inputs_dir>"]
     outputs_dir = args["<outputs_dir>"]
+
+    # Assuming inputs and outputs are in same parent directoy
+    # This can be relaxed, but for now it's fine.
+    data_dir = abspath(join(inputs_dir, os.pardir))
+    assert data_dir == abspath(join(outputs_dir, os.pardir))
+
     checkpoint_dir = args["--checkpoint-dir"]
     checkpoint_path_d = args["--checkpoint-path-d"]
     checkpoint_path_g = args["--checkpoint-path-g"]
@@ -363,7 +434,9 @@ if __name__ == "__main__":
 
     reference_discriminator_path = args["--reference-discriminator"]
     reset_optimizers = args["--reset_optimizers"]
+    log_event_path = args["--log-event-path"]
 
+    # Flags to update discriminator/generator or not
     update_d = w_d > 0
     update_g = False if discriminator_warmup else True
 
@@ -389,33 +462,56 @@ if __name__ == "__main__":
     print("Eval files:\n", X["test"].collected_files)
 
     # Collect stats for noramlization (from training data)
-    ty = "train"
-    data_mean, data_var, last_sample_count = P.meanvar(
-        X[ty], utt_lengths[ty], return_last_sample_count=True)
-    data_mean, data_var = P.meanvar(
-        Y[ty], utt_lengths[ty], mean_=data_mean, var_=data_var,
-        last_sample_count=last_sample_count)
-    data_std = np.sqrt(data_var)
+    # if this becomes performance heavy (not now), this can be done in a separte
+    # script
+    phase = "train"
+    # TODO: ugly?
+    if hp == hparams.vc:
+        # Collect mean/var from source and target features
+        data_mean, data_var, last_sample_count = P.meanvar(
+            X[phase], utt_lengths[phase], return_last_sample_count=True)
+        data_mean, data_var = P.meanvar(
+            Y[phase], utt_lengths[phase], mean_=data_mean, var_=data_var,
+            last_sample_count=last_sample_count)
+        data_std = np.sqrt(data_var)
 
-    np.save("data_mean", data_mean)
-    np.save("data_var", data_var)
+        np.save(join(data_dir, "data_mean"), data_mean)
+        np.save(join(data_dir, "data_var"), data_var)
 
-    # Dataset loaders
-    dataset_loaders = get_data_loaders(X, Y, data_mean, data_std)
+        # Dataset loaders
+        dataset_loaders = get_vc_data_loaders(X, Y, data_mean, data_std)
+    else:
+        ty = "acoustic" if hp == hparams.tts_acoustic else "duration"
+        X_data_min, X_data_max = P.minmax(X[phase], utt_lengths[phase])
+        Y_data_mean, Y_data_var = P.meanvar(Y[phase], utt_lengths[phase])
+        Y_data_std = np.sqrt(Y_data_var)
+
+        np.save(join(data_dir, "X_{}_data_min".format(ty)), X_data_min)
+        np.save(join(data_dir, "X_{}_data_max".format(ty)), X_data_max)
+        np.save(join(data_dir, "Y_{}_data_mean".format(ty)), Y_data_mean)
+        np.save(join(data_dir, "Y_{}_data_var".format(ty)), Y_data_var)
+
+        if hp.generator_params["in_dim"] is None:
+            hp.generator_params["in_dim"] = X_data_min.shape[-1]
+        if hp.generator_params["out_dim"] is None:
+            hp.generator_params["out_dim"] = Y_data_mean.shape[-1]
+        if hp.discriminator_params["in_dim"] is None:
+            sizes = get_static_stream_sizes(
+                hp.stream_sizes, hp.has_dynamic_features, len(hp.windows))
+            hp.discriminator_params["in_dim"] = int(np.sum(sizes))
+        dataset_loaders = get_tts_data_loaders(
+            X, Y, X_data_min, X_data_max, Y_data_mean, Y_data_std)
 
     # Models
-    static_dim = hp.order
-    in_dim = static_dim * len(hp.windows)
-    out_dim = in_dim
-    model_g = In2OutHighwayNet(
-        in_dim=in_dim, out_dim=out_dim, static_dim=static_dim)
-    model_d = Discriminator(in_dim=static_dim)
+    model_g = getattr(in2out_highway, hp.generator)(**hp.generator_params)
+    model_d = getattr(in2out_highway, hp.discriminator)(**hp.discriminator_params)
     print(model_g)
     print(model_d)
 
     # Reference discriminator model to compute spoofing rate
     if reference_discriminator_path is not None:
-        reference_discriminator = Discriminator(in_dim=static_dim)
+        reference_discriminator = getattr(
+            in2out_highway, hp.discriminator)(**hp.discriminator_params)
         load_checkpoint(reference_discriminator, None, reference_discriminator_path)
     else:
         reference_discriminator = None
@@ -426,12 +522,12 @@ if __name__ == "__main__":
             reference_discriminator = reference_discriminator.cuda()
 
     # Optimizers
-    optimizer_g = optim.Adagrad(model_g.parameters(),
-                                lr=hp.lr,
-                                weight_decay=hp.weight_decay)
-    optimizer_d = optim.Adagrad(model_d.parameters(),
-                                lr=hp.lr,
-                                weight_decay=hp.weight_decay)
+    optimizer_g = getattr(optim, hp.optimizer_g)(model_g.parameters(),
+                                                 **hp.optimizer_g_params)
+    optimizer_d = getattr(optim, hp.optimizer_d)(model_d.parameters(),
+                                                 **hp.optimizer_d_params)
+    print(optimizer_g)
+    print(optimizer_d)
 
     # Load checkpoint
     if checkpoint_path_d:
@@ -449,24 +545,26 @@ if __name__ == "__main__":
     if restart_epoch >= 0:
         global_epoch = restart_epoch
 
-    print("Start training from epoch {}".format(global_epoch))
-
     # Setup tensorboard logger
-    ext = "discriminator_warmup" if discriminator_warmup else ""
-    log_path = "log/run-test" + ext + str(np.random.randint(100000))
-    print("Los path: {}".format(log_path))
-    tensorboard_logger.configure(log_path)
+    if log_event_path is None:
+        log_event_path = "log/run-test" + str(np.random.randint(100000))
+    print("Los event path: {}".format(log_event_path))
+    tensorboard_logger.configure(log_event_path)
 
     # Train
+    print("Start training from epoch {}".format(global_epoch))
     train_loop((model_g, model_d), (optimizer_g, optimizer_d),
                dataset_loaders, w_d=w_d, update_d=update_d, update_g=update_g,
-               reference_discriminator=reference_discriminator)
+               reference_discriminator=reference_discriminator,
+               stream_sizes=hp.stream_sizes,
+               has_dynamic_features=hp.has_dynamic_features)
 
     # Save models
-    for model, optimizer, enabled in [(model_g, optimizer_g, update_g),
-                                      (model_d, optimizer_d, update_d)]:
+    for model, optimizer, enabled, name in [
+            (model_g, optimizer_g, update_g, "Generator"),
+            (model_d, optimizer_d, update_d, "Discriminator")]:
         save_checkpoint(
-            model, optimizer, global_epoch, checkpoint_dir)
+            model, optimizer, global_epoch, checkpoint_dir, name)
 
     print("Finished!")
     sys.exit(0)
