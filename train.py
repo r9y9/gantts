@@ -1,11 +1,11 @@
 # coding: utf-8
-"""Trainining script
+"""Trainining script for GAN-based TTS and VC models.
 
 usage: train.py [options] <inputs_dir> <outputs_dir>
 
 options:
     --hparams_name=<name>       Name of hyper params [default: vc].
-    --hparams=<parmas>          Hyper parameters [default: ].
+    --hparams=<parmas>          Hyper parameters to be overrided [default: ].
     --checkpoint-dir=<dir>      Where to save models [default: checkpoints].
     --checkpoint-path-g=<name>  Restore generator from checkpoint if given.
     --checkpoint-path-d=<name>  Restore discriminator from checkpoint if given.
@@ -42,12 +42,10 @@ from nnmnkwii.paramgen import unit_variance_mlpg_matrix
 from nnmnkwii.datasets import FileSourceDataset, FileDataSource
 from nnmnkwii.datasets import MemoryCacheDataset
 
-from in2out_highway import In2OutHighwayNet, Discriminator
-from in2out_highway import MaskedMSELoss, sequence_mask
 import in2out_highway
-
-from in2out_highway import multi_stream_mlpg, get_static_features
-from in2out_highway import get_static_stream_sizes
+from seqloss import MaskedMSELoss, sequence_mask
+from multistream import multi_stream_mlpg, get_static_features
+from multistream import get_static_stream_sizes
 
 import hparams
 from hparams import hparams_debug_string
@@ -102,8 +100,6 @@ class TTSDataset(object):
         self.Y = Y
         self.X_data_min, self.X_data_scale = P.minmax_scale_params(
             X_data_min, X_data_max, feature_range=(0.01, 0.99))
-        self.X_data_min = X_data_min
-        self.X_data_max = X_data_max
         self.Y_data_mean = Y_data_mean
         self.Y_data_std = Y_data_std
 
@@ -329,7 +325,7 @@ def train_loop(models, optimizers, dataset_loaders, w_d=0.0,
                         R, stream_sizes, has_dynamic_features)
                 else:
                     # Mulistream features cannot be used in this case
-                    y_hat_static = model_g(x, R)
+                    y_hat_static = model_g(x, R, lengths=sorted_lengths)
 
                 # Compute spoofing rate
                 if reference_discriminator is not None:
@@ -482,8 +478,8 @@ if __name__ == "__main__":
         dataset_loaders = get_vc_data_loaders(X, Y, data_mean, data_std)
     else:
         ty = "acoustic" if hp == hparams.tts_acoustic else "duration"
-        X_data_min, X_data_max = P.minmax(X[phase], utt_lengths[phase])
-        Y_data_mean, Y_data_var = P.meanvar(Y[phase], utt_lengths[phase])
+        X_data_min, X_data_max = P.minmax(X[phase])
+        Y_data_mean, Y_data_var = P.meanvar(Y[phase])
         Y_data_std = np.sqrt(Y_data_var)
 
         np.save(join(data_dir, "X_{}_data_min".format(ty)), X_data_min)

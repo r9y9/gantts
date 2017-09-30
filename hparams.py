@@ -28,6 +28,7 @@ vc = tf.contrib.training.HParams(
         "num_hidden": 3,
         "hidden_dim": 512,
         "static_dim": 59,
+        "dropout": 0.5,
     },
     optimizer_g="Adagrad",
     optimizer_g_params={
@@ -76,17 +77,19 @@ tts_duration = tf.contrib.training.HParams(
     has_dynamic_features=[False],
 
     # Generator
-    generator="MLP",
+    generator="LSTMRNN",
     generator_params={
         "in_dim": None,
         "out_dim": None,
         "num_hidden": 3,
-        "hidden_dim": 256,
+        "hidden_dim": 512,
+        "bidirectional": True,
+        "dropout": 0.5,
     },
     optimizer_g="Adam",
     optimizer_g_params={
         "lr": 0.001,
-        "weight_decay": 1e-7,
+        "weight_decay": 1e-6,
     },
 
     # Discriminator
@@ -98,8 +101,8 @@ tts_duration = tf.contrib.training.HParams(
     },
     optimizer_d="Adam",
     optimizer_d_params={
-        "lr": 0.001,
-        "weight_decay": 1e-7,
+        "lr": 0.002,
+        "weight_decay": 1e-6,
     },
 
     # This should be overrided
@@ -132,17 +135,19 @@ tts_acoustic = tf.contrib.training.HParams(
     has_dynamic_features=[True, True, False, True],
 
     # Generator
-    generator="MLP",
+    generator="LSTMRNN",
     generator_params={
         "in_dim": None,
         "out_dim": None,
         "num_hidden": 3,
-        "hidden_dim": 256,
+        "hidden_dim": 512,
+        "bidirectional": True,
+        "dropout": 0.5,
     },
     optimizer_g="Adam",
     optimizer_g_params={
-        "lr": 0.001,
-        "weight_decay": 1e-7,
+        "lr": 0.002,
+        "weight_decay": 1e-6,
     },
 
     # Discriminator
@@ -155,15 +160,15 @@ tts_acoustic = tf.contrib.training.HParams(
     optimizer_d="Adam",
     optimizer_d_params={
         "lr": 0.001,
-        "weight_decay": 1e-7,
+        "weight_decay": 1e-6,
     },
 
     # This should be overrided
     nepoch=200,
 
     # Datasets and data loader
-    batch_size=32,
-    num_workers=1,
+    batch_size=26,
+    num_workers=2,
     pin_memory=True,
     cache_size=1200,
 )
