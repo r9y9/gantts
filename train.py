@@ -471,7 +471,7 @@ if __name__ == "__main__":
     checkpoint_dir = args["--checkpoint-dir"]
     checkpoint_path_d = args["--checkpoint-d"]
     checkpoint_path_g = args["--checkpoint-g"]
-    checkpoint_path_d = args["--checkpoint-d"]
+    checkpoint_path_r = args["--checkpoint-r"]
     max_files = int(args["--max_files"])
     w_d = float(args["--w_d"])
     discriminator_warmup = args["--discriminator-warmup"]
@@ -553,10 +553,10 @@ if __name__ == "__main__":
     print("Discriminator:", model_d)
 
     # Reference discriminator model to compute spoofing rate
-    if checkpoint_path_d is not None:
+    if checkpoint_path_r is not None:
         reference_discriminator = getattr(
             gantts.models, hp.discriminator)(**hp.discriminator_params)
-        load_checkpoint(reference_discriminator, None, checkpoint_path_d)
+        load_checkpoint(reference_discriminator, None, checkpoint_path_r)
     else:
         reference_discriminator = None
 

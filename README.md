@@ -36,7 +36,7 @@ Feature extraction scripts are written for CMU ARCTIC dataset, but can be easily
 ### Text-to-speech synthesis (en)
 
 ```
-> tts_demo.sh
+./tts_demo.sh
 ```
 This will download slt_arctic_full_data used in Merlin's demo, perform feature extraction and training models.
 

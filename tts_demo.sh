@@ -45,5 +45,5 @@ if [ "$run_acoustic_training" == 1 ]; then
         data/cmu_arctic_tts/X_acoustic/ \
         data/cmu_arctic_tts/Y_acoustic/ \
         checkpoints/tts_acoustic \
-        50 5 20 100d
+        50 5 20 100
 fi
