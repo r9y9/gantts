@@ -9,7 +9,7 @@ import numpy as np
 from nnmnkwii.autograd import unit_variance_mlpg
 from nnmnkwii.paramgen import unit_variance_mlpg_matrix
 
-from multistream import get_static_stream_sizes
+from .multistream import get_static_stream_sizes
 
 
 def sequence_mask(sequence_length):
