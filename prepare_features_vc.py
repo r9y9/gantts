@@ -17,7 +17,7 @@ import numpy as np
 from nnmnkwii.datasets import FileSourceDataset
 from nnmnkwii import preprocessing as P
 from nnmnkwii.preprocessing.alignment import DTWAligner
-from nnmnkwii.datasets import cmu_arctic
+from nnmnkwii.datasets import cmu_arctic, voice_statistics, vcc2016
 
 import pysptk
 import pyworld
@@ -31,6 +31,9 @@ from hparams import vc as hp
 from hparams import hparams_debug_string
 
 
+# vcc2016.WavFileDataSource and voice_statistics.WavFileDataSource can be
+# drop-in replacement. See below for details:
+# https://r9y9.github.io/nnmnkwii/latest/references/datasets.html#builtin-data-sources
 class MGCSource(cmu_arctic.WavFileDataSource):
     def __init__(self, data_root, speakers, max_files=None):
         super(MGCSource, self).__init__(data_root, speakers,

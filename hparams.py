@@ -78,7 +78,7 @@ tts_duration = tf.contrib.training.HParams(
     use_phone_alignment=False,
     subphone_features=None,
     add_frame_features=False,
-    question_path=join(dirname(__file__), "questions",
+    question_path=join(dirname(__file__), "nnmnkwii_gallery", "data",
                        "questions-radio_dnn_416.hed"),
 
     # Duration features
@@ -94,14 +94,14 @@ tts_duration = tf.contrib.training.HParams(
         "in_dim": None,
         "out_dim": None,
         "num_hidden": 3,
-        "hidden_dim": 256,
+        "hidden_dim": 512,
         "bidirectional": True,
         "dropout": 0.5,
     },
-    optimizer_g="Adagrad",
+    optimizer_g="Adam",
     optimizer_g_params={
         "lr": 0.01,
-        "weight_decay": 0,
+        "weight_decay": 1e-7,
     },
 
     # Discriminator
@@ -139,7 +139,7 @@ tts_acoustic = tf.contrib.training.HParams(
     use_phone_alignment=False,
     subphone_features="full",
     add_frame_features=True,
-    question_path=join(dirname(__file__), "questions",
+    question_path=join(dirname(__file__), "nnmnkwii_gallery", "data",
                        "questions-radio_dnn_416.hed"),
 
     # Acoustic features
@@ -160,7 +160,7 @@ tts_acoustic = tf.contrib.training.HParams(
         "in_dim": None,
         "out_dim": None,
         "num_hidden": 2,
-        "hidden_dim": 256,
+        "hidden_dim": 512,
         "bidirectional": True,
         "dropout": 0.5,
     },
@@ -175,7 +175,7 @@ tts_acoustic = tf.contrib.training.HParams(
     discriminator_params={
         "in_dim": None,
         "num_hidden": 2,
-        "hidden_dim": 256,
+        "hidden_dim": 512,
         "dropout": 0.5,
         "last_sigmoid": True,
     },

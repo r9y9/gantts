@@ -1,8 +1,5 @@
 # coding: utf-8
 import sys
-from os.path import dirname, join
-tacotron_lib_dir = join(dirname(__file__), "..")
-
 import numpy as np
 from torch.autograd import Variable
 import torch
