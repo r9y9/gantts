@@ -1,7 +1,7 @@
-"""Prepare acoustic features to be used for DNN training.
+"""Prepare acoustic/duration features for DNN-training for text-to-speech.
 
 usage:
-    prepare_features_vc.py [options] <DATA_ROOT>
+    prepare_features_tts.py [options] <DATA_ROOT>
 
 options:
     --max_files=<N>      Max num files to be collected. [default: -1]
@@ -28,7 +28,8 @@ import os
 import sys
 from glob import glob
 
-from hparams import hparams_tts as hp
+from hparams import tts_acoustic as hp_acoustic
+from hparams import tts_duration as hp_duration
 from hparams import hparams_debug_string
 
 
@@ -39,12 +40,11 @@ class LinguisticSource(FileDataSource):
         self.max_files = max_files
         self.add_frame_features = add_frame_features
         self.subphone_features = subphone_features
-        self.test_paths = None
         self.binary_dict, self.continuous_dict = hts.load_question_set(
-            hp.question_path)
+            hp_acoustic.question_path)
 
     def collect_files(self):
-        label_dir_name = "label_phone_align" if hp.use_phone_alignment \
+        label_dir_name = "label_phone_align" if hp_acoustic.use_phone_alignment \
             else "label_state_align"
         files = sorted(glob(join(self.data_root, label_dir_name, "*.lab")))
         if self.max_files is not None and self.max_files > 0:
@@ -73,7 +73,7 @@ class DurationSource(FileDataSource):
         self.max_files = max_files
 
     def collect_files(self):
-        label_dir_name = "label_phone_align" if hp.use_phone_alignment \
+        label_dir_name = "label_phone_align" if hp_duration.use_phone_alignment \
             else "label_state_align"
         files = sorted(glob(join(self.data_root, label_dir_name, "*.lab")))
         if self.max_files is not None and self.max_files > 0:
@@ -97,7 +97,7 @@ class AcousticSource(FileDataSource):
 
     def collect_files(self):
         wav_paths = sorted(glob(join(self.data_root, "wav", "*.wav")))
-        label_dir_name = "label_phone_align" if hp.use_phone_alignment \
+        label_dir_name = "label_phone_align" if hp_acoustic.use_phone_alignment \
             else "label_state_align"
         label_paths = sorted(glob(join(self.data_root, label_dir_name, "*.lab")))
         if self.max_files is not None and self.max_files > 0:
@@ -108,7 +108,7 @@ class AcousticSource(FileDataSource):
     def collect_features(self, wav_path, label_path):
         fs, x = wavfile.read(wav_path)
         x = x.astype(np.float64)
-        f0, timeaxis = pyworld.dio(x, fs, frame_period=hp.frame_period)
+        f0, timeaxis = pyworld.dio(x, fs, frame_period=hp_acoustic.frame_period)
         f0 = pyworld.stonemask(x, f0, timeaxis, fs)
         spectrogram = pyworld.cheaptrick(x, f0, timeaxis, fs)
         aperiodicity = pyworld.d4c(x, f0, timeaxis, fs)
@@ -116,7 +116,7 @@ class AcousticSource(FileDataSource):
         bap = pyworld.code_aperiodicity(aperiodicity, fs)
         if self.alpha is None:
             self.alpha = pysptk.util.mcepalpha(fs)
-        mgc = pysptk.sp2mc(spectrogram, order=hp.order, alpha=self.alpha)
+        mgc = pysptk.sp2mc(spectrogram, order=hp_acoustic.order, alpha=self.alpha)
         f0 = f0[:, None]
         lf0 = f0.copy()
         nonzero_indices = np.nonzero(f0)
@@ -124,9 +124,9 @@ class AcousticSource(FileDataSource):
         vuv = (lf0 != 0).astype(np.float32)
         lf0 = P.interp1d(lf0, kind="slinear")
 
-        mgc = P.delta_features(mgc, hp.windows)
-        lf0 = P.delta_features(lf0, hp.windows)
-        bap = P.delta_features(bap, hp.windows)
+        mgc = P.delta_features(mgc, hp_acoustic.windows)
+        lf0 = P.delta_features(lf0, hp_acoustic.windows)
+        bap = P.delta_features(bap, hp_acoustic.windows)
 
         features = np.hstack((mgc, lf0, vuv, bap))
 
@@ -147,14 +147,20 @@ if __name__ == "__main__":
     dst_dir = args["--dst_dir"]
     overwrite = args["--overwrite"]
 
-    print(hparams_debug_string(hp))
+    print("Acoustic", hparams_debug_string(hp_acoustic))
+    print("Duration", hparams_debug_string(hp_duration))
+
+    assert hp_acoustic.question_path == hp_duration.question_path
+    assert hp_acoustic.use_phone_alignment == hp_duration.use_phone_alignment
 
     # Features required to train duration model
     # X -> Y
     # X: linguistic
     # Y: duration
-    X_duration_source = LinguisticSource(DATA_ROOT, max_files,
-                                         add_frame_features=False, subphone_features=None)
+    X_duration_source = LinguisticSource(
+        DATA_ROOT, max_files,
+        add_frame_features=hp_duration.add_frame_features,
+        subphone_features=hp_duration.subphone_features)
     Y_duration_source = DurationSource(DATA_ROOT, max_files)
 
     X_duration = FileSourceDataset(X_duration_source)
@@ -164,9 +170,10 @@ if __name__ == "__main__":
     # X -> Y
     # X: linguistic
     # Y: acoustic
-    subphone_features = "full" if not hp.use_phone_alignment else "coarse_coding"
-    X_acoustic_source = LinguisticSource(DATA_ROOT, max_files,
-                                         add_frame_features=True, subphone_features=subphone_features)
+    X_acoustic_source = LinguisticSource(
+        DATA_ROOT, max_files,
+        add_frame_features=hp_acoustic.add_frame_features,
+        subphone_features=hp_acoustic.subphone_features)
     Y_acoustic_source = AcousticSource(DATA_ROOT, max_files)
     X_acoustic = FileSourceDataset(X_acoustic_source)
     Y_acoustic = FileSourceDataset(Y_acoustic_source)

@@ -5,7 +5,7 @@ usage:
 
 options:
     --max_files=<N>      Max num files to be collected. [default: 100]
-    --dst_dir=<d>        Destination directory [default: data/cmu_arcic_vc].
+    --dst_dir=<d>        Destination directory [default: data/cmu_arctic_vc].
     --overwrite          Overwrite files.
     -h, --help           show this help message and exit
 """
@@ -27,7 +27,7 @@ from os.path import basename, splitext, exists, expanduser, join, dirname
 import os
 import sys
 
-from hparams import hparams_vc as hp
+from hparams import vc as hp
 from hparams import hparams_debug_string
 
 
@@ -84,8 +84,8 @@ if __name__ == "__main__":
         sys.exit(0)
 
     # Create dirs
-    for speaker in [source_speaker, target_speaker]:
-        d = join(dst_dir, speaker)
+    for speaker, name in [(source_speaker, "X"), (target_speaker, "Y")]:
+        d = join(dst_dir, name)
         print("Destination dir for {}: {}".format(speaker, d))
         os.makedirs(d, exist_ok=True)
 
@@ -102,8 +102,8 @@ if __name__ == "__main__":
         # paths
         src_name = splitext(basename(X_dataset.collected_files[idx][0]))[0]
         tgt_name = splitext(basename(Y_dataset.collected_files[idx][0]))[0]
-        src_path = join(dst_dir, source_speaker, src_name)
-        tgt_path = join(dst_dir, target_speaker, tgt_name)
+        src_path = join(dst_dir, "X", src_name)
+        tgt_path = join(dst_dir, "Y", tgt_name)
 
         # Trim and ajast frames
         x = P.trim_zeros_frames(x)

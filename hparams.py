@@ -6,6 +6,12 @@ import numpy as np
 from os.path import join, dirname
 
 
+def hparams_debug_string(params):
+    values = params.values()
+    hp = ['  %s: %s' % (name, values[name]) for name in sorted(values)]
+    return 'Hyperparameters:\n' + '\n'.join(hp)
+
+
 # Hyper parameters for voice conversion
 vc = tf.contrib.training.HParams(
     # Acoustic features
@@ -37,11 +43,13 @@ vc = tf.contrib.training.HParams(
     },
 
     # Discriminator
-    discriminator="Discriminator",
+    discriminator="MLP",
     discriminator_params={
         "in_dim": 59,
         "num_hidden": 2,
         "hidden_dim": 256,
+        "dropout": 0.5,
+        "last_sigmoid": True,
     },
     optimizer_d="Adagrad",
     optimizer_d_params={
@@ -51,6 +59,10 @@ vc = tf.contrib.training.HParams(
 
     # This should be overrided
     nepoch=200,
+
+    # LR schedule
+    lr_decay_schedule=False,
+    lr_decay_epoch=10,
 
     # Datasets and data loader
     batch_size=32,
@@ -64,12 +76,12 @@ vc = tf.contrib.training.HParams(
 tts_duration = tf.contrib.training.HParams(
     # Linguistic features
     use_phone_alignment=False,
+    subphone_features=None,
+    add_frame_features=False,
     question_path=join(dirname(__file__), "questions",
                        "questions-radio_dnn_416.hed"),
 
     # Duration features
-    order=59,
-    frame_period=5,
     windows=[
         (0, 0, np.array([1.0])),
     ],
@@ -82,31 +94,37 @@ tts_duration = tf.contrib.training.HParams(
         "in_dim": None,
         "out_dim": None,
         "num_hidden": 3,
-        "hidden_dim": 512,
+        "hidden_dim": 256,
         "bidirectional": True,
         "dropout": 0.5,
     },
-    optimizer_g="Adam",
+    optimizer_g="Adagrad",
     optimizer_g_params={
-        "lr": 0.001,
-        "weight_decay": 1e-6,
+        "lr": 0.01,
+        "weight_decay": 0,
     },
 
     # Discriminator
-    discriminator="Discriminator",
+    discriminator="MLP",
     discriminator_params={
         "in_dim": None,
         "num_hidden": 2,
         "hidden_dim": 256,
+        "dropout": 0.5,
+        "last_sigmoid": True,
     },
-    optimizer_d="Adam",
+    optimizer_d="Adagrad",
     optimizer_d_params={
-        "lr": 0.002,
-        "weight_decay": 1e-6,
+        "lr": 0.01,
+        "weight_decay": 0,
     },
 
     # This should be overrided
     nepoch=200,
+
+    # LR schedule
+    lr_decay_schedule=False,
+    lr_decay_epoch=10,
 
     # Datasets and data loader
     batch_size=32,
@@ -119,6 +137,8 @@ tts_duration = tf.contrib.training.HParams(
 tts_acoustic = tf.contrib.training.HParams(
     # Linguistic
     use_phone_alignment=False,
+    subphone_features="full",
+    add_frame_features=True,
     question_path=join(dirname(__file__), "questions",
                        "questions-radio_dnn_416.hed"),
 
@@ -139,32 +159,38 @@ tts_acoustic = tf.contrib.training.HParams(
     generator_params={
         "in_dim": None,
         "out_dim": None,
-        "num_hidden": 3,
-        "hidden_dim": 512,
+        "num_hidden": 2,
+        "hidden_dim": 256,
         "bidirectional": True,
         "dropout": 0.5,
     },
-    optimizer_g="Adam",
+    optimizer_g="Adagrad",
     optimizer_g_params={
-        "lr": 0.002,
-        "weight_decay": 1e-6,
+        "lr": 0.01,
+        "weight_decay": 0,
     },
 
     # Discriminator
-    discriminator="Discriminator",
+    discriminator="MLP",
     discriminator_params={
         "in_dim": None,
         "num_hidden": 2,
         "hidden_dim": 256,
+        "dropout": 0.5,
+        "last_sigmoid": True,
     },
-    optimizer_d="Adam",
+    optimizer_d="Adagrad",
     optimizer_d_params={
-        "lr": 0.001,
-        "weight_decay": 1e-6,
+        "lr": 0.01,
+        "weight_decay": 0,
     },
 
     # This should be overrided
     nepoch=200,
+
+    # LR schedule
+    lr_decay_schedule=False,
+    lr_decay_epoch=10,
 
     # Datasets and data loader
     batch_size=26,
@@ -172,9 +198,3 @@ tts_acoustic = tf.contrib.training.HParams(
     pin_memory=True,
     cache_size=1200,
 )
-
-
-def hparams_debug_string(params):
-    values = params.values()
-    hp = ['  %s: %s' % (name, values[name]) for name in sorted(values)]
-    return 'Hyperparameters:\n' + '\n'.join(hp)

@@ -7,12 +7,12 @@ options:
     --hparams_name=<name>       Name of hyper params [default: vc].
     --hparams=<parmas>          Hyper parameters to be overrided [default: ].
     --checkpoint-dir=<dir>      Where to save models [default: checkpoints].
-    --checkpoint-path-g=<name>  Restore generator from checkpoint if given.
-    --checkpoint-path-d=<name>  Restore discriminator from checkpoint if given.
+    --checkpoint-g=<name>       Load generator from checkpoint if given.
+    --checkpoint-d=<name>       Load discriminator from checkpoint if given.
+    --checkpoint-r=<name>       Load reference model to compute spoofing rate.
     --max_files=<N>             Max num files to be collected. [default: -1]
     --discriminator-warmup      Warmup discriminator.
     --w_d=<f>                   Weight for loss weighting [default: 1.0].
-    --reference-discriminator=<name>    Reference discriminator.
     --restart_epoch=<N>         Restart epoch [default: -1].
     --reset_optimizers          Reset optimizers.
     --log-event-path=<name>     Log event path.
@@ -42,18 +42,19 @@ from nnmnkwii.paramgen import unit_variance_mlpg_matrix
 from nnmnkwii.datasets import FileSourceDataset, FileDataSource
 from nnmnkwii.datasets import MemoryCacheDataset
 
-import in2out_highway
-from seqloss import MaskedMSELoss, sequence_mask
-from multistream import multi_stream_mlpg, get_static_features
-from multistream import get_static_stream_sizes
+import gantts
+from gantts.multistream import multi_stream_mlpg, get_static_features
+from gantts.multistream import get_static_stream_sizes
+from gantts.seqloss import MaskedMSELoss, sequence_mask
 
 import hparams
 from hparams import hparams_debug_string
 hp = None  # to be initailized later
 
 global_epoch = 0
-test_size = 0.05
+test_size = 0.112  # 1000 training data for cmu arctic
 random_state = 1234
+checkpoint_interval = 10
 
 use_cuda = torch.cuda.is_available()
 
@@ -68,6 +69,8 @@ class NPYDataSource(FileDataSource):
         npy_files = list(filter(lambda x: splitext(x)[-1] == ".npy",
                                 os.listdir(self.dirname)))
         npy_files = list(map(lambda d: join(self.dirname, d), npy_files))
+        # last 5 is for real testset
+        npy_files = npy_files[:len(npy_files) - 5]
         if self.max_files is not None and self.max_files > 0:
             npy_files = npy_files[:self.max_files]
         train_files, test_files = train_test_split(
@@ -231,27 +234,46 @@ def update_discriminator(model_d, optimizer_d, y_static, y_hat_static, mask,
         real_correct_count, fake_correct_count
 
 
-def update_generator(model_g, model_d, optimizer_g, y_static, y_hat_static,
-                     weight, lengths, mask, phase, eps=1e-20):
+def update_generator(model_g, model_d, optimizer_g,
+                     y, y_hat, y_static, y_hat_static,
+                     adv_weight, lengths, mask, phase, eps=1e-20):
     T = mask.sum().data[0]
 
-    # MGE loss
-    loss_mge = MaskedMSELoss()(y_hat_static, y_static, lengths)
+    criterion = MaskedMSELoss()
+
+    # MSELoss in static feature domain
+    loss_mge = criterion(y_hat_static, y_static, lengths)
+
+    # MSELoss in static + delta features domain
+    loss_mse = criterion(y_hat, y, lengths)
 
     # Adversarial loss
-    if weight > 0:
+    if adv_weight > 0:
         loss_adv = -(torch.log(model_d(y_hat_static) + eps) * mask).sum() / T
     else:
-        loss_adv = Variable(y_static.data.new(1).zero_())
+        loss_adv = Variable(y.data.new(1).zero_())
 
     # MGE + ADV loss
     # try to decieve discriminator
-    loss_g = loss_mge + weight * loss_adv
+    loss_g = (loss_mse + loss_mge) + adv_weight * loss_adv
     if phase == "train":
         loss_g.backward()
         optimizer_g.step()
 
-    return loss_mge.data[0], loss_adv.data[0], loss_g.data[0]
+    return loss_mse.data[0], loss_mge.data[0], loss_adv.data[0], loss_g.data[0]
+
+
+def exp_lr_scheduler(optimizer, epoch, nepoch, init_lr=0.0001, lr_decay_epoch=100):
+    """Decay learning rate by a factor of 0.1 every lr_decay_epoch epochs."""
+    lr = init_lr * (0.1**(epoch // lr_decay_epoch))
+
+    if epoch % lr_decay_epoch == 0:
+        print('LR is set to {} at epoch {}'.format(lr, epoch))
+
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+
+    return optimizer
 
 
 def train_loop(models, optimizers, dataset_loaders, w_d=0.0,
@@ -273,8 +295,18 @@ def train_loop(models, optimizers, dataset_loaders, w_d=0.0,
     E_loss_adv = 1
     global global_epoch
     for global_epoch in tqdm(range(global_epoch + 1, hp.nepoch + 1)):
+        # LR schedule
+        if hp.lr_decay_schedule and update_g:
+            optimizer_g = exp_lr_scheduler(optimizer_g, global_epoch - 1, hp.nepoch,
+                                           init_lr=hp.optimizer_g_params["lr"],
+                                           lr_decay_epoch=hp.lr_decay_epoch)
+        if hp.lr_decay_schedule and update_d:
+            optimizer_d = exp_lr_scheduler(optimizer_d, global_epoch - 1, hp.nepoch,
+                                           init_lr=hp.optimizer_d_params["lr"],
+                                           lr_decay_epoch=hp.lr_decay_epoch)
+
         for phase in ["train", "test"]:
-            running_loss = {"generator": 0.0, "mge": 0.0,
+            running_loss = {"generator": 0.0, "mse": 0.0, "mge": 0.0,
                             "loss_real_d": 0.0,
                             "loss_fake_d": 0.0,
                             "loss_adv": 0.0,
@@ -292,20 +324,22 @@ def train_loop(models, optimizers, dataset_loaders, w_d=0.0,
 
                 # Get sorted batch
                 x, y = x[indices], y[indices]
-                y_static = get_static_features(
-                    y, len(hp.windows), stream_sizes, has_dynamic_features)
 
                 # MLPG paramgen matrix
                 R = unit_variance_mlpg_matrix(hp.windows, max_len)
                 R = torch.from_numpy(R)
 
                 if use_cuda:
-                    x, y_static, R = x.cuda(), y_static.cuda(), R.cuda()
+                    x, y, R = x.cuda(), y.cuda(), R.cuda()
                     sorted_lengths = sorted_lengths.cuda()
 
                 # Pack into variables
-                x, y_static = Variable(x), Variable(y_static)
+                x, y = Variable(x), Variable(y)
                 sorted_lengths = Variable(sorted_lengths)
+
+                # Static features
+                y_static = get_static_features(
+                    y, len(hp.windows), stream_sizes, has_dynamic_features)
 
                 # Num frames in batch
                 total_num_frames += sorted_lengths.float().sum().data[0]
@@ -319,13 +353,15 @@ def train_loop(models, optimizers, dataset_loaders, w_d=0.0,
 
                 # Apply model (generator)
                 if stream_sizes is not None:
+                    # Case: generic models (can be sequence model)
                     assert has_dynamic_features is not None
+                    y_hat = model_g(x, lengths=sorted_lengths)
                     y_hat_static = multi_stream_mlpg(
-                        model_g(x, lengths=sorted_lengths),
-                        R, stream_sizes, has_dynamic_features)
+                        y_hat, R, stream_sizes, has_dynamic_features)
                 else:
+                    # Case: models include parameter generation in itself
                     # Mulistream features cannot be used in this case
-                    y_hat_static = model_g(x, R, lengths=sorted_lengths)
+                    y_hat, y_hat_static = model_g(x, R, lengths=sorted_lengths)
 
                 # Compute spoofing rate
                 if reference_discriminator is not None:
@@ -349,25 +385,28 @@ def train_loop(models, optimizers, dataset_loaders, w_d=0.0,
 
                 ### Update generator ###
                 if update_g:
-                    weight = float(w_d * E_loss_mge / E_loss_adv)
-                    loss_mge, loss_adv, loss_g, = update_generator(
-                        model_g, model_d, optimizer_g, y_static, y_hat_static,
-                        weight, sorted_lengths, mask, phase)
+                    adv_weight = float(w_d * E_loss_mge / E_loss_adv)
+                    loss_mse, loss_mge, loss_adv, loss_g, = update_generator(
+                        model_g, model_d, optimizer_g, y, y_hat,
+                        y_static, y_hat_static,
+                        adv_weight, sorted_lengths, mask, phase)
 
+                    running_loss["mse"] += loss_mse
                     running_loss["mge"] += loss_mge
                     running_loss["loss_adv"] += loss_adv
                     running_loss["generator"] += loss_g
 
             # Update expectation
             if update_d and update_g and phase == "train":
-                E_loss_mge = running_loss["mge"] / N
+                E_loss_mge = (running_loss["mse"] + running_loss["mge"]) / N
                 E_loss_adv = running_loss["loss_adv"] / N
                 log_value("E(mge)", E_loss_mge, global_epoch)
                 log_value("E(adv)", E_loss_adv, global_epoch)
                 log_value("MGE/ADV loss weight",  E_loss_mge / E_loss_adv, global_epoch)
 
             # Log loss
-            for ty, enabled in [("mge", update_g),
+            for ty, enabled in [("mse", update_g),
+                                ("mge", update_g),
                                 ("discriminator", update_d),
                                 ("loss_real_d", update_d),
                                 ("loss_fake_d", update_d),
@@ -389,6 +428,15 @@ def train_loop(models, optimizers, dataset_loaders, w_d=0.0,
             if reference_discriminator is not None:
                 log_value("{} spoofing rate".format(phase),
                           regard_fake_as_natural / total_num_frames, global_epoch)
+
+        # Save checkpoints
+        if global_epoch % checkpoint_interval == 0:
+            for model, optimizer, enabled, name in [
+                    (model_g, optimizer_g, update_g, "Generator"),
+                    (model_d, optimizer_d, update_d, "Discriminator")]:
+                if enabled:
+                    save_checkpoint(
+                        model, optimizer, global_epoch, checkpoint_dir, name)
 
     return 0
 
@@ -421,14 +469,14 @@ if __name__ == "__main__":
     assert data_dir == abspath(join(outputs_dir, os.pardir))
 
     checkpoint_dir = args["--checkpoint-dir"]
-    checkpoint_path_d = args["--checkpoint-path-d"]
-    checkpoint_path_g = args["--checkpoint-path-g"]
+    checkpoint_path_d = args["--checkpoint-d"]
+    checkpoint_path_g = args["--checkpoint-g"]
+    checkpoint_path_d = args["--checkpoint-d"]
     max_files = int(args["--max_files"])
     w_d = float(args["--w_d"])
     discriminator_warmup = args["--discriminator-warmup"]
     restart_epoch = int(args["--restart_epoch"])
 
-    reference_discriminator_path = args["--reference-discriminator"]
     reset_optimizers = args["--reset_optimizers"]
     log_event_path = args["--log-event-path"]
 
@@ -499,16 +547,16 @@ if __name__ == "__main__":
             X, Y, X_data_min, X_data_max, Y_data_mean, Y_data_std)
 
     # Models
-    model_g = getattr(in2out_highway, hp.generator)(**hp.generator_params)
-    model_d = getattr(in2out_highway, hp.discriminator)(**hp.discriminator_params)
-    print(model_g)
-    print(model_d)
+    model_g = getattr(gantts.models, hp.generator)(**hp.generator_params)
+    model_d = getattr(gantts.models, hp.discriminator)(**hp.discriminator_params)
+    print("Generator:", model_g)
+    print("Discriminator:", model_d)
 
     # Reference discriminator model to compute spoofing rate
-    if reference_discriminator_path is not None:
+    if checkpoint_path_d is not None:
         reference_discriminator = getattr(
-            in2out_highway, hp.discriminator)(**hp.discriminator_params)
-        load_checkpoint(reference_discriminator, None, reference_discriminator_path)
+            gantts.models, hp.discriminator)(**hp.discriminator_params)
+        load_checkpoint(reference_discriminator, None, checkpoint_path_d)
     else:
         reference_discriminator = None
 
@@ -522,8 +570,6 @@ if __name__ == "__main__":
                                                  **hp.optimizer_g_params)
     optimizer_d = getattr(optim, hp.optimizer_d)(model_d.parameters(),
                                                  **hp.optimizer_d_params)
-    print(optimizer_g)
-    print(optimizer_d)
 
     # Load checkpoint
     if checkpoint_path_d:
@@ -559,8 +605,9 @@ if __name__ == "__main__":
     for model, optimizer, enabled, name in [
             (model_g, optimizer_g, update_g, "Generator"),
             (model_d, optimizer_d, update_d, "Discriminator")]:
-        save_checkpoint(
-            model, optimizer, global_epoch, checkpoint_dir, name)
+        if enabled:
+            save_checkpoint(
+                model, optimizer, global_epoch, checkpoint_dir, name)
 
     print("Finished!")
     sys.exit(0)
