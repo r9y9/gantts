@@ -209,24 +209,30 @@ def get_tts_data_loaders(X, Y, X_data_min, X_data_max, Y_data_mean, Y_data_std):
     return dataset_loaders
 
 
+def get_selected_static_stream(y_hat_static):
+    static_stream_sizes = get_static_stream_sizes(
+        hp.stream_sizes, hp.has_dynamic_features, len(hp.windows))
+    return select_streams(y_hat_static, static_stream_sizes,
+                          streams=hp.adversarial_streams)
+
+
 def update_discriminator(model_d, optimizer_d, y_static, y_hat_static, mask,
                          phase, eps=1e-20):
     # Select streams
     if hp.adversarial_streams is not None:
-        static_stream_sizes = get_static_stream_sizes(
-            hp.stream_sizes, hp.has_dynamic_features, len(hp.windows))
-        y_static = select_streams(y_static, static_stream_sizes, streams=hp.adversarial_streams)
-        y_hat_static = select_streams(y_hat_static, static_stream_sizes,
-                                      streams=hp.adversarial_streams)
-        mask = mask.expand_as(y_hat_static)
+        y_static_adv = get_selected_static_stream(y_static)
+        y_hat_static_adv = get_selected_static_stream(y_hat_static)
+    else:
+        y_static_adv, y_hat_static_adv = y_static, y_hat_static
+
     T = mask.sum().data[0]
 
     # Real
-    D_real = model_d(y_static)
+    D_real = model_d(y_static_adv)
     real_correct_count = ((D_real > 0.5).float() * mask).sum().data[0]
 
     # Fake
-    D_fake = model_d(y_hat_static)
+    D_fake = model_d(y_hat_static_adv)
     fake_correct_count = ((D_fake < 0.5).float() * mask).sum().data[0]
 
     # Loss
@@ -245,6 +251,8 @@ def update_discriminator(model_d, optimizer_d, y_static, y_hat_static, mask,
 def update_generator(model_g, model_d, optimizer_g,
                      y, y_hat, y_static, y_hat_static,
                      adv_weight, lengths, mask, phase, eps=1e-20):
+    T = mask.sum().data[0]
+
     criterion = MaskedMSELoss()
 
     # MSELoss in static feature domain
@@ -257,13 +265,11 @@ def update_generator(model_g, model_d, optimizer_g,
     if adv_weight > 0:
         # Select streams
         if hp.adversarial_streams is not None:
-            static_stream_sizes = get_static_stream_sizes(
-                hp.stream_sizes, hp.has_dynamic_features, len(hp.windows))
-            y_hat_static = select_streams(y_hat_static, static_stream_sizes,
-                                          streams=hp.adversarial_streams)
-            mask = mask.expand_as(y_hat_static)
+            y_hat_static_adv = get_selected_static_stream(y_hat_static)
+        else:
+            y_hat_static_adv = y_hat_static
 
-        loss_adv = -(torch.log(model_d(y_hat_static) + eps) * mask).sum() / mask.sum().data[0]
+        loss_adv = -(torch.log(model_d(y_hat_static_adv) + eps) * mask).sum() / T
     else:
         loss_adv = Variable(y.data.new(1).zero_())
 
@@ -379,7 +385,11 @@ def train_loop(models, optimizers, dataset_loaders, w_d=0.0,
 
                 # Compute spoofing rate
                 if reference_discriminator is not None:
-                    target = reference_discriminator(y_hat_static)
+                    if hp.adversarial_streams is not None:
+                        y_hat_static_ref = get_selected_static_stream(y_hat_static)
+                    else:
+                        y_hat_static_ref = y_hat_static
+                    target = reference_discriminator(y_hat_static_ref)
                     # Count samples classified as natural, while inputs are
                     # actually generated.
                     regard_fake_as_natural += ((target > 0.5).float() * mask).sum().data[0]
