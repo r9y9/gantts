@@ -44,7 +44,7 @@ from nnmnkwii.datasets import MemoryCacheDataset
 
 import gantts
 from gantts.multistream import multi_stream_mlpg, get_static_features
-from gantts.multistream import get_static_stream_sizes
+from gantts.multistream import get_static_stream_sizes, select_streams
 from gantts.seqloss import MaskedMSELoss, sequence_mask
 
 import hparams
@@ -211,6 +211,14 @@ def get_tts_data_loaders(X, Y, X_data_min, X_data_max, Y_data_mean, Y_data_std):
 
 def update_discriminator(model_d, optimizer_d, y_static, y_hat_static, mask,
                          phase, eps=1e-20):
+    # Select streams
+    if hp.adversarial_streams is not None:
+        static_stream_sizes = get_static_stream_sizes(
+            hp.stream_sizes, hp.has_dynamic_features, len(hp.windows))
+        y_static = select_streams(y_static, static_stream_sizes, streams=hp.adversarial_streams)
+        y_hat_static = select_streams(y_hat_static, static_stream_sizes,
+                                      streams=hp.adversarial_streams)
+        mask = mask.expand_as(y_hat_static)
     T = mask.sum().data[0]
 
     # Real
@@ -237,8 +245,6 @@ def update_discriminator(model_d, optimizer_d, y_static, y_hat_static, mask,
 def update_generator(model_g, model_d, optimizer_g,
                      y, y_hat, y_static, y_hat_static,
                      adv_weight, lengths, mask, phase, eps=1e-20):
-    T = mask.sum().data[0]
-
     criterion = MaskedMSELoss()
 
     # MSELoss in static feature domain
@@ -249,7 +255,15 @@ def update_generator(model_g, model_d, optimizer_g,
 
     # Adversarial loss
     if adv_weight > 0:
-        loss_adv = -(torch.log(model_d(y_hat_static) + eps) * mask).sum() / T
+        # Select streams
+        if hp.adversarial_streams is not None:
+            static_stream_sizes = get_static_stream_sizes(
+                hp.stream_sizes, hp.has_dynamic_features, len(hp.windows))
+            y_hat_static = select_streams(y_hat_static, static_stream_sizes,
+                                          streams=hp.adversarial_streams)
+            mask = mask.expand_as(y_hat_static)
+
+        loss_adv = -(torch.log(model_d(y_hat_static) + eps) * mask).sum() / mask.sum().data[0]
     else:
         loss_adv = Variable(y.data.new(1).zero_())
 

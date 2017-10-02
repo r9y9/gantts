@@ -11,6 +11,19 @@ import numpy as np
 from nnmnkwii.autograd import unit_variance_mlpg
 
 
+def select_streams(inputs, stream_sizes=[60, 1, 1, 1],
+                   streams=[True, True, True, True]):
+    ret = []
+    start_indices = np.hstack(([0], np.cumsum(stream_sizes)[:-1]))
+    for start_idx, size, enabled in zip(
+            start_indices, stream_sizes, streams):
+        if not enabled:
+            continue
+        ret.append(inputs[:, :, start_idx:start_idx + size])
+
+    return torch.cat(ret, dim=-1)
+
+
 def get_static_stream_sizes(stream_sizes, has_dynamic_features, num_windows):
     """Get static dimention for each feature stream.
     """
@@ -22,7 +35,8 @@ def get_static_stream_sizes(stream_sizes, has_dynamic_features, num_windows):
 
 
 def get_static_features(inputs, num_windows, stream_sizes=[180, 3, 1, 3],
-                        has_dynamic_features=[True, True, False, True]):
+                        has_dynamic_features=[True, True, False, True],
+                        streams=[True, True, True, True]):
     """Get static features from static+dynamic features.
     """
     _, _, D = inputs.size()
@@ -34,8 +48,10 @@ def get_static_features(inputs, num_windows, stream_sizes=[180, 3, 1, 3],
     # Multi stream case
     ret = []
     start_indices = np.hstack(([0], np.cumsum(stream_sizes)[:-1]))
-    for start_idx, size, v in zip(
-            start_indices, stream_sizes, has_dynamic_features):
+    for start_idx, size, v, enabled in zip(
+            start_indices, stream_sizes, has_dynamic_features, streams):
+        if not enabled:
+            continue
         if v:
             static_features = inputs[:, :, start_idx:start_idx + size // num_windows]
         else:
@@ -46,7 +62,8 @@ def get_static_features(inputs, num_windows, stream_sizes=[180, 3, 1, 3],
 
 def multi_stream_mlpg(inputs, R,
                       stream_sizes=[180, 3, 1, 3],
-                      has_dynamic_features=[True, True, False, True]):
+                      has_dynamic_features=[True, True, False, True],
+                      streams=[True, True, True, True]):
     """Split streams and do apply MLPG if stream has dynamic features.
     """
     num_windows = R.size(1) / R.size(0)
@@ -72,9 +89,11 @@ def multi_stream_mlpg(inputs, R,
     static_stream_end_indices = np.cumsum(static_stream_sizes)
 
     ret = []
-    for in_start_idx, in_end_idx, out_start_idx, out_end_idx, v in zip(
+    for in_start_idx, in_end_idx, out_start_idx, out_end_idx, v, enabled in zip(
             start_indices, end_indices, static_stream_start_indices,
-            static_stream_end_indices, has_dynamic_features):
+            static_stream_end_indices, has_dynamic_features, streams):
+        if not enabled:
+            continue
         x = inputs[:, :, in_start_idx:in_end_idx]
         y = unit_variance_mlpg(R, x) if v else x
         ret.append(y)

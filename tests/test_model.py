@@ -10,6 +10,7 @@ from nnmnkwii.paramgen import unit_variance_mlpg_matrix
 from gantts.models import In2OutHighwayNet, MLP
 from gantts.seqloss import MaskedMSELoss, sequence_mask
 from gantts.multistream import multi_stream_mlpg, get_static_features
+from gantts.multistream import get_static_stream_sizes, select_streams
 
 
 def test_model():
@@ -51,6 +52,59 @@ def test_model():
     x = x.cuda()
     R = R.cuda()
     _, y_hat = model(x, R)
+
+
+def test_select_streams():
+    static_stream_sizes = [60, 1, 1, 1]
+    x = torch.zeros(32, 100, 63)
+    assert select_streams(x, static_stream_sizes, streams=[
+        True, True, True, True]).size() == (32, 100, 63)
+    assert select_streams(x, static_stream_sizes, streams=[
+        True, False, False, False]).size() == (32, 100, 60)
+    assert select_streams(x, static_stream_sizes, streams=[
+        True, False, False, True]).size() == (32, 100, 61)
+
+
+def test_get_static_stream_sizes():
+    stream_sizes = [180, 3, 1, 3]
+    has_dynamic_features = [True, True, False, True]
+    num_windows = 3
+
+    static_stream_sizes = get_static_stream_sizes(stream_sizes, has_dynamic_features, num_windows)
+    print(static_stream_sizes)
+    assert np.all(static_stream_sizes == [60, 1, 1, 1])
+
+
+def test_get_static_features():
+    windows = [
+        (0, 0, np.array([1.0])),
+        (1, 1, np.array([-0.5, 0.0, 0.5])),
+        (1, 1, np.array([1.0, -2.0, 1.0])),
+    ]
+    in_dim = 187
+    T = 100
+    batch_size = 32
+    x = Variable(torch.rand(batch_size, T, in_dim))
+
+    stream_sizes = [180, 3, 1, 3]
+    has_dynamic_features = [True, True, False, True]
+    static_features = get_static_features(
+        x, len(windows), stream_sizes, has_dynamic_features)
+    assert static_features.size() == (batch_size, T, 60 + 1 + 1 + 1)
+
+    # 1
+    assert get_static_features(
+        x, len(windows), stream_sizes, has_dynamic_features,
+        streams=[True, False, False, False]).size() == (batch_size, T, 60)
+    # 2
+    assert get_static_features(
+        x, len(windows), stream_sizes, has_dynamic_features,
+        streams=[False, True, False, False]).size() == (batch_size, T, 1)
+
+    # 3
+    assert get_static_features(
+        x, len(windows), stream_sizes, has_dynamic_features,
+        streams=[True, False, False, True]).size() == (batch_size, T, 60 + 1)
 
 
 def test_multi_stream_mlpg():
