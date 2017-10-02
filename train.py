@@ -12,7 +12,9 @@ options:
     --checkpoint-r=<name>       Load reference model to compute spoofing rate.
     --max_files=<N>             Max num files to be collected. [default: -1]
     --discriminator-warmup      Warmup discriminator.
-    --w_d=<f>                   Weight for loss weighting [default: 1.0].
+    --w_d=<f>                   Adversarial loss weight [default: 1.0].
+    --mse_w=<f>                 MSE loss weight [default: 1.0].
+    --mge_w=<f>                 MGE loss weight [default: 1.0].
     --restart_epoch=<N>         Restart epoch [default: -1].
     --reset_optimizers          Reset optimizers.
     --log-event-path=<name>     Log event path.
@@ -242,6 +244,7 @@ def update_discriminator(model_d, optimizer_d, y_static, y_hat_static, mask,
 
     if phase == "train":
         loss_d.backward(retain_graph=True)
+        torch.nn.utils.clip_grad_norm(model_d.parameters(), 1.0)
         optimizer_d.step()
 
     return loss_d.data[0], loss_fake_d.data[0], loss_real_d.data[0],\
@@ -250,7 +253,8 @@ def update_discriminator(model_d, optimizer_d, y_static, y_hat_static, mask,
 
 def update_generator(model_g, model_d, optimizer_g,
                      y, y_hat, y_static, y_hat_static,
-                     adv_weight, lengths, mask, phase, eps=1e-20):
+                     adv_w, lengths, mask, phase,
+                     mse_w=None, mge_w=None, eps=1e-20):
     T = mask.sum().data[0]
 
     criterion = MaskedMSELoss()
@@ -262,7 +266,7 @@ def update_generator(model_g, model_d, optimizer_g,
     loss_mse = criterion(y_hat, y, lengths)
 
     # Adversarial loss
-    if adv_weight > 0:
+    if adv_w > 0:
         # Select streams
         if hp.adversarial_streams is not None:
             y_hat_static_adv = get_selected_static_stream(y_hat_static)
@@ -273,11 +277,12 @@ def update_generator(model_g, model_d, optimizer_g,
     else:
         loss_adv = Variable(y.data.new(1).zero_())
 
-    # MGE + ADV loss
+    # MSE + MGE + ADV loss
     # try to decieve discriminator
-    loss_g = (loss_mse + loss_mge) + adv_weight * loss_adv
+    loss_g = (mse_w * loss_mse + mge_w * loss_mge) + adv_w * loss_adv
     if phase == "train":
         loss_g.backward()
+        torch.nn.utils.clip_grad_norm(model_g.parameters(), 1.0)
         optimizer_g.step()
 
     return loss_mse.data[0], loss_mge.data[0], loss_adv.data[0], loss_g.data[0]
@@ -296,7 +301,8 @@ def exp_lr_scheduler(optimizer, epoch, nepoch, init_lr=0.0001, lr_decay_epoch=10
     return optimizer
 
 
-def train_loop(models, optimizers, dataset_loaders, w_d=0.0,
+def train_loop(models, optimizers, dataset_loaders,
+               w_d=0.0, mse_w=0.0, mge_w=1.0,
                update_d=True, update_g=True,
                reference_discriminator=None,
                stream_sizes=None,
@@ -409,11 +415,12 @@ def train_loop(models, optimizers, dataset_loaders, w_d=0.0,
 
                 ### Update generator ###
                 if update_g:
-                    adv_weight = float(w_d * E_loss_mge / E_loss_adv)
+                    adv_w = float(w_d * E_loss_mge / E_loss_adv)
                     loss_mse, loss_mge, loss_adv, loss_g, = update_generator(
                         model_g, model_d, optimizer_g, y, y_hat,
                         y_static, y_hat_static,
-                        adv_weight, sorted_lengths, mask, phase)
+                        adv_w, sorted_lengths, mask, phase,
+                        mse_w=mse_w, mge_w=mge_w)
 
                     running_loss["mse"] += loss_mse
                     running_loss["mge"] += loss_mge
@@ -498,6 +505,8 @@ if __name__ == "__main__":
     checkpoint_path_r = args["--checkpoint-r"]
     max_files = int(args["--max_files"])
     w_d = float(args["--w_d"])
+    mse_w = float(args["--mse_w"])
+    mge_w = float(args["--mge_w"])
     discriminator_warmup = args["--discriminator-warmup"]
     restart_epoch = int(args["--restart_epoch"])
 
@@ -526,8 +535,6 @@ if __name__ == "__main__":
         assert np.allclose(x_lengths, y_lengths)
         utt_lengths[phase] = x_lengths
         print("Size of dataset for {}: {}".format(phase, len(X[phase])))
-
-    print("Eval files:\n", X["test"].collected_files)
 
     # Collect stats for noramlization (from training data)
     # if this becomes performance heavy (not now), this can be done in a separte

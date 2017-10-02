@@ -80,12 +80,14 @@ class MLP(nn.Module):
 
 class LSTMRNN(nn.Module):
     def __init__(self,  in_dim=118, out_dim=118, num_hidden=2, hidden_dim=256,
-                 bidirectional=False, dropout=0):
+                 bidirectional=False, dropout=0, last_sigmoid=False):
         super(LSTMRNN, self).__init__()
         self.num_direction = 2 if bidirectional else 1
         self.lstm = nn.LSTM(in_dim, hidden_dim, num_hidden, batch_first=True,
                             bidirectional=bidirectional, dropout=dropout)
         self.hidden2out = nn.Linear(hidden_dim * self.num_direction, out_dim)
+        self.sigmoid = nn.Sigmoid()
+        self.last_sigmoid = last_sigmoid
 
     def forward(self, sequence, lengths):
         if isinstance(lengths, Variable):
@@ -95,4 +97,5 @@ class LSTMRNN(nn.Module):
         output, _ = self.lstm(sequence)
         output, _ = nn.utils.rnn.pad_packed_sequence(output, batch_first=True)
         output = self.hidden2out(output)
-        return output
+
+        return self.sigmoid(output) if self.last_sigmoid else output

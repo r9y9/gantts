@@ -26,11 +26,13 @@ vc = tf.contrib.training.HParams(
     stream_sizes=None,
     has_dynamic_features=None,
 
+    adversarial_streams=None,
+
     # Generator
     generator="In2OutHighwayNet",
     generator_params={
-        "in_dim": 59 * 3,
-        "out_dim": 59 * 3,
+        "in_dim": None,
+        "out_dim": None,
         "num_hidden": 3,
         "hidden_dim": 512,
         "static_dim": 59,
@@ -46,6 +48,7 @@ vc = tf.contrib.training.HParams(
     discriminator="MLP",
     discriminator_params={
         "in_dim": 59,
+        "out_dim": 1,
         "num_hidden": 2,
         "hidden_dim": 256,
         "dropout": 0.5,
@@ -87,6 +90,8 @@ tts_duration = tf.contrib.training.HParams(
     ],
     stream_sizes=[5],
     has_dynamic_features=[False],
+    # Streams used for computing adversarial loss
+    adversarial_streams=[True],
 
     # Generator
     generator="LSTMRNN",
@@ -97,10 +102,11 @@ tts_duration = tf.contrib.training.HParams(
         "hidden_dim": 512,
         "bidirectional": True,
         "dropout": 0.5,
+        "last_sigmoid": False,
     },
-    optimizer_g="Adam",
+    optimizer_g="Adagrad",
     optimizer_g_params={
-        "lr": 0.01,
+        "lr": 0.02,
         "weight_decay": 1e-7,
     },
 
@@ -108,6 +114,7 @@ tts_duration = tf.contrib.training.HParams(
     discriminator="MLP",
     discriminator_params={
         "in_dim": None,
+        "out_dim": 1,
         "num_hidden": 2,
         "hidden_dim": 256,
         "dropout": 0.5,
@@ -115,16 +122,16 @@ tts_duration = tf.contrib.training.HParams(
     },
     optimizer_d="Adagrad",
     optimizer_d_params={
-        "lr": 0.01,
-        "weight_decay": 0,
+        "lr": 0.02,
+        "weight_decay": 1e-7,
     },
 
     # This should be overrided
     nepoch=200,
 
     # LR schedule
-    lr_decay_schedule=False,
-    lr_decay_epoch=10,
+    lr_decay_schedule=True,
+    lr_decay_epoch=25,
 
     # Datasets and data loader
     batch_size=32,
@@ -154,43 +161,50 @@ tts_acoustic = tf.contrib.training.HParams(
     stream_sizes=[180, 3, 1, 3],
     has_dynamic_features=[True, True, False, True],
 
+    # Streams used for computing adversarial loss
+    # NOTE: you should probably change discriminator's `in_dim`
+    # if you change the adv_streams
+    adversarial_streams=[True, False, False, False],
+
     # Generator
     generator="LSTMRNN",
     generator_params={
         "in_dim": None,
         "out_dim": None,
-        "num_hidden": 2,
+        "num_hidden": 3,
         "hidden_dim": 512,
         "bidirectional": True,
         "dropout": 0.5,
+        "last_sigmoid": False,
     },
     optimizer_g="Adagrad",
     optimizer_g_params={
-        "lr": 0.01,
-        "weight_decay": 0,
+        "lr": 0.02,
+        "weight_decay": 1e-7,
     },
 
     # Discriminator
     discriminator="MLP",
     discriminator_params={
-        "in_dim": None,
+        "in_dim": 60,
+        "out_dim": 1,
         "num_hidden": 2,
-        "hidden_dim": 512,
+        "hidden_dim": 256,
         "dropout": 0.5,
         "last_sigmoid": True,
     },
     optimizer_d="Adagrad",
     optimizer_d_params={
-        "lr": 0.01,
-        "weight_decay": 0,
+        "lr": 0.02,
+        "weight_decay": 1e-7,
     },
 
     # This should be overrided
     nepoch=200,
 
     # LR schedule
-    lr_decay_schedule=False,
-    lr_decay_epoch=10,
+    lr_decay_schedule=True,
+    lr_decay_epoch=25,
 
     # Datasets and data loader
     batch_size=26,
