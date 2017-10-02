@@ -78,8 +78,8 @@ if __name__ == "__main__":
     Y_dataset = FileSourceDataset(MGCSource(DATA_ROOT, [target_speaker],
                                             max_files=max_files))
 
-    skip_feature_extraction = exists(join(dst_dir, source_speaker)) \
-        and exists(join(dst_dir, target_speaker))
+    skip_feature_extraction = exists(join(dst_dir, "X")) \
+        and exists(join(dst_dir, "Y"))
     if overwrite:
         skip_feature_extraction = False
     if skip_feature_extraction:

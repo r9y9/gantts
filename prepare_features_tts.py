@@ -124,6 +124,11 @@ class AcousticSource(FileDataSource):
         vuv = (lf0 != 0).astype(np.float32)
         lf0 = P.interp1d(lf0, kind="slinear")
 
+        # 50hz parameter trajectory smoothing
+        hop_length = int(fs * (hp_acoustic.frame_period * 0.001))
+        modfs = fs / hop_length
+        mgc = P.modspec_smoothing(mgc, modfs, cutoff=50)
+
         mgc = P.delta_features(mgc, hp_acoustic.windows)
         lf0 = P.delta_features(lf0, hp_acoustic.windows)
         bap = P.delta_features(bap, hp_acoustic.windows)

@@ -522,6 +522,11 @@ if __name__ == "__main__":
         np.save(join(data_dir, "data_mean"), data_mean)
         np.save(join(data_dir, "data_var"), data_var)
 
+        if hp.generator_params["in_dim"] is None:
+            hp.generator_params["in_dim"] = data_mean.shape[-1]
+        if hp.generator_params["out_dim"] is None:
+            hp.generator_params["out_dim"] = data_mean.shape[-1]
+
         # Dataset loaders
         dataset_loaders = get_vc_data_loaders(X, Y, data_mean, data_std)
     else:

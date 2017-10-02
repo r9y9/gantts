@@ -57,7 +57,7 @@ class In2OutHighwayNet(nn.Module):
 
 
 class MLP(nn.Module):
-    def __init__(self, in_dim=118, num_hidden=2, hidden_dim=256,
+    def __init__(self, in_dim=118, out_dim=1, num_hidden=2, hidden_dim=256,
                  dropout=0.5, last_sigmoid=True):
         super(MLP, self).__init__()
         in_sizes = [in_dim] + [hidden_dim] * (num_hidden - 1)
@@ -65,13 +65,13 @@ class MLP(nn.Module):
         self.layers = nn.ModuleList(
             [nn.Linear(in_size, out_size) for (in_size, out_size)
              in zip(in_sizes, out_sizes)])
-        self.last_linear = nn.Linear(hidden_dim, 1)
+        self.last_linear = nn.Linear(hidden_dim, out_dim)
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
         self.dropout = nn.Dropout(dropout)
         self.last_sigmoid = last_sigmoid
 
-    def forward(self, x):
+    def forward(self, x, lengths=None):
         for layer in self.layers:
             x = self.dropout(self.relu(layer(x)))
         x = self.last_linear(x)
