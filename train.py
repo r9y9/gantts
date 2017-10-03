@@ -13,7 +13,7 @@ options:
     --max_files=<N>             Max num files to be collected. [default: -1]
     --discriminator-warmup      Warmup discriminator.
     --w_d=<f>                   Adversarial (ADV) loss weight [default: 1.0].
-    --mse_w=<f>                 Mean squared error (MSE) loss weight [default: 1.0].
+    --mse_w=<f>                 Mean squared error (MSE) loss weight [default: 0.0].
     --mge_w=<f>                 Minimum generation error (MGE) loss weight [default: 1.0].
     --restart_epoch=<N>         Restart epoch [default: -1].
     --reset_optimizers          Reset optimizers, otherwise restored from checkpoint.
@@ -35,6 +35,7 @@ import sys
 import os
 from os.path import splitext, join, abspath
 from tqdm import tqdm
+from warnings import warn
 
 import tensorboard_logger
 from tensorboard_logger import log_value
@@ -224,8 +225,8 @@ def get_selected_static_stream(y_hat_static):
     return y_hat_selected
 
 
-def update_discriminator(model_d, optimizer_d, y_static, y_hat_static, mask,
-                         phase, eps=1e-20):
+def update_discriminator(model_d, optimizer_d, y_static, y_hat_static, lengths,
+                         mask, phase, eps=1e-20):
     # Select streams
     if hp.adversarial_streams is not None:
         y_static_adv = get_selected_static_stream(y_static)
@@ -236,11 +237,11 @@ def update_discriminator(model_d, optimizer_d, y_static, y_hat_static, mask,
     T = mask.sum().data[0]
 
     # Real
-    D_real = model_d(y_static_adv)
+    D_real = model_d(y_static_adv, lengths=lengths)
     real_correct_count = ((D_real > 0.5).float() * mask).sum().data[0]
 
     # Fake
-    D_fake = model_d(y_hat_static_adv)
+    D_fake = model_d(y_hat_static_adv, lengths=lengths)
     fake_correct_count = ((D_fake < 0.5).float() * mask).sum().data[0]
 
     # Loss
@@ -279,7 +280,8 @@ def update_generator(model_g, model_d, optimizer_g,
         else:
             y_hat_static_adv = y_hat_static
 
-        loss_adv = -(torch.log(model_d(y_hat_static_adv) + eps) * mask).sum() / T
+        loss_adv = -(torch.log(model_d(
+            y_hat_static_adv, lengths=lengths) + eps) * mask).sum() / T
     else:
         loss_adv = Variable(y.data.new(1).zero_())
 
@@ -401,7 +403,8 @@ def train_loop(models, optimizers, dataset_loaders,
                         y_hat_static_ref = get_selected_static_stream(y_hat_static)
                     else:
                         y_hat_static_ref = y_hat_static
-                    target = reference_discriminator(y_hat_static_ref)
+                    target = reference_discriminator(
+                        y_hat_static_ref, lengths=sorted_lengths)
                     # Count samples classified as natural, while inputs are
                     # actually generated.
                     regard_fake_as_natural += ((target > 0.5).float() * mask).sum().data[0]
@@ -412,7 +415,7 @@ def train_loop(models, optimizers, dataset_loaders,
                     loss_d, loss_fake_d, loss_real_d, _real_correct_count,\
                         _fake_correct_count = update_discriminator(
                             model_d, optimizer_d, y_static, y_hat_static,
-                            mask, phase)
+                            sorted_lengths, mask, phase)
                     running_loss["discriminator"] += loss_d
                     running_loss["loss_fake_d"] += loss_fake_d
                     running_loss["loss_real_d"] += loss_real_d
@@ -422,7 +425,7 @@ def train_loop(models, optimizers, dataset_loaders,
                 ### Update generator ###
                 if update_g:
                     adv_w = w_d * float(np.clip(E_loss_mge / E_loss_adv, 0, 1e+3))
-                    loss_mse, loss_mge, loss_adv, loss_g, = update_generator(
+                    loss_mse, loss_mge, loss_adv, loss_g = update_generator(
                         model_g, model_d, optimizer_g, y, y_hat,
                         y_static, y_hat_static,
                         adv_w, sorted_lengths, mask, phase,
@@ -602,7 +605,11 @@ if __name__ == "__main__":
     if checkpoint_path_r is not None:
         reference_discriminator = getattr(
             gantts.models, hp.discriminator)(**hp.discriminator_params)
-        load_checkpoint(reference_discriminator, None, checkpoint_path_r)
+        try:
+            load_checkpoint(reference_discriminator, None, checkpoint_path_r)
+        except KeyError:
+            warn("Invalid cehckpoint for reference discriminator")
+            reference_discriminator = None
     else:
         reference_discriminator = None
 

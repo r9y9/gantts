@@ -24,6 +24,12 @@ echo "Total epoch for GAN:" $total_epoch
 
 max_files=-1 # -1 means `use full data`.
 
+run_baseline=1
+run_generator_warmup=1
+run_discriminator_warmup=1
+run_spoofing_warmup=1
+run_adversarial=1
+
 # Checkpoint naming rule:
 # checkpoint_epoch{epoch}_{Generator/Discriminator}.pth
 
@@ -32,52 +38,60 @@ spoofing_checkpoint=$dst_root/spoofing/checkpoint_epoch${spoofing_total_epoch}_D
 
 
 ### Baseline ###
-
-python train.py --hparams_name="$hparams_name" \
-    --max_files=$max_files --w_d=0 --hparams="nepoch=$total_epoch"\
-    --checkpoint-dir=$dst_root/baseline $inputs_dir $outputs_dir \
-    --log-event-path="log/${hparams_name}_baseline_$randstr"
-
+if [ "${run_baseline}" == 1 ]; then
+    python train.py --hparams_name="$hparams_name" \
+        --max_files=$max_files --w_d=0 --hparams="nepoch=$total_epoch"\
+        --checkpoint-dir=$dst_root/baseline $inputs_dir $outputs_dir \
+        --log-event-path="log/${hparams_name}_baseline_$randstr"
+fi
 
 ### GAN ###
 
 # Generator warmup
 # only train generator
-python train.py --hparams_name="$hparams_name" \
-    --max_files=$max_files --w_d=0 --hparams="nepoch=$generator_warmup_epoch" \
-    --checkpoint-dir=$dst_root/gan_g_warmup $inputs_dir $outputs_dir \
-    --log-event-path="log/${hparams_name}_generator_warmup_$randstr"
+if [ "${run_generator_warmup}" == 1 ]; then
+    python train.py --hparams_name="$hparams_name" \
+        --max_files=$max_files --w_d=0 --hparams="nepoch=$generator_warmup_epoch" \
+        --checkpoint-dir=$dst_root/gan_g_warmup $inputs_dir $outputs_dir \
+        --log-event-path="log/${hparams_name}_generator_warmup_$randstr"
+fi
 
 # Discriminator warmup
 # only train discriminator
-python train.py --hparams_name="$hparams_name" \
-    --max_files=$max_files --w_d=1 \
-    --checkpoint-g=$dst_root/gan_g_warmup/checkpoint_epoch${generator_warmup_epoch}_Generator.pth\
-    --discriminator-warmup --hparams="nepoch=$discriminator_warmup_epoch" \
-    --checkpoint-dir=$dst_root/gan_d_warmup $inputs_dir $outputs_dir \
-    --restart_epoch=0 \
-    --log-event-path="log/${hparams_name}_discriminator_warmup_$randstr"
+if [ "${run_discriminator_warmup}" == 1 ]; then
+    python train.py --hparams_name="$hparams_name" \
+        --max_files=$max_files --w_d=1 \
+        --checkpoint-g=$dst_root/gan_g_warmup/checkpoint_epoch${generator_warmup_epoch}_Generator.pth\
+        --discriminator-warmup --hparams="nepoch=$discriminator_warmup_epoch" \
+        --checkpoint-dir=$dst_root/gan_d_warmup $inputs_dir $outputs_dir \
+        --restart_epoch=0 \
+        --log-event-path="log/${hparams_name}_discriminator_warmup_$randstr"
+fi
 
 # Discriminator warmup for spoofing rate computation
 # try to discrimnate baseline's generated features as fake
 # only train discriminator
-python train.py --hparams_name="$hparams_name" \
-    --max_files=$max_files --w_d=1 --hparams="nepoch=$spoofing_total_epoch" \
-    --checkpoint-g=${baseline_checkpoint} \
-    --discriminator-warmup \
-    --checkpoint-dir=$dst_root/spoofing \
-    --restart_epoch=0 $inputs_dir $outputs_dir \
-    --log-event-path="log/${hparams_name}_spoofing_model_warmup_$randstr"
+if [ "${run_spoofing_warmup}" == 1 ]; then
+    python train.py --hparams_name="$hparams_name" \
+        --max_files=$max_files --w_d=1 --hparams="nepoch=$spoofing_total_epoch" \
+        --checkpoint-g=${baseline_checkpoint} \
+        --discriminator-warmup \
+        --checkpoint-dir=$dst_root/spoofing \
+        --restart_epoch=0 $inputs_dir $outputs_dir \
+        --log-event-path="log/${hparams_name}_spoofing_model_warmup_$randstr"
+fi
 
 # Finally do joint training generator and discriminator
 # start from ${generator_warmup_epoch}
-python train.py --hparams_name="$hparams_name" \
-    --max_files=$max_files \
-    --checkpoint-d=$dst_root/gan_d_warmup/checkpoint_epoch${discriminator_warmup_epoch}_Discriminator.pth \
-    --checkpoint-g=$dst_root/gan_g_warmup/checkpoint_epoch${generator_warmup_epoch}_Generator.pth \
-    --checkpoint-r=${spoofing_checkpoint} \
-    --w_d=1 --hparams="nepoch=$total_epoch" \
-    --checkpoint-dir=$dst_root/gan \
-    --restart_epoch=${generator_warmup_epoch} \
-    --reset_optimizers $inputs_dir $outputs_dir \
-    --log-event-path="log/${hparams_name}_adversarial_training_$randstr"
+if [ "${run_adversarial}" == 1 ]; then
+    python train.py --hparams_name="$hparams_name" \
+        --max_files=$max_files \
+        --checkpoint-d=$dst_root/gan_d_warmup/checkpoint_epoch${discriminator_warmup_epoch}_Discriminator.pth \
+        --checkpoint-g=$dst_root/gan_g_warmup/checkpoint_epoch${generator_warmup_epoch}_Generator.pth \
+        --checkpoint-r=${spoofing_checkpoint} \
+        --w_d=1 --hparams="nepoch=$total_epoch" \
+        --checkpoint-dir=$dst_root/gan \
+        --restart_epoch=${generator_warmup_epoch} \
+        --reset_optimizers $inputs_dir $outputs_dir \
+        --log-event-path="log/${hparams_name}_adversarial_training_$randstr"
+fi
