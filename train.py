@@ -12,11 +12,11 @@ options:
     --checkpoint-r=<name>       Load reference model to compute spoofing rate.
     --max_files=<N>             Max num files to be collected. [default: -1]
     --discriminator-warmup      Warmup discriminator.
-    --w_d=<f>                   Adversarial loss weight [default: 1.0].
-    --mse_w=<f>                 MSE loss weight [default: 1.0].
-    --mge_w=<f>                 MGE loss weight [default: 1.0].
+    --w_d=<f>                   Adversarial (ADV) loss weight [default: 1.0].
+    --mse_w=<f>                 Mean squared error (MSE) loss weight [default: 1.0].
+    --mge_w=<f>                 Minimum generation error (MGE) loss weight [default: 1.0].
     --restart_epoch=<N>         Restart epoch [default: -1].
-    --reset_optimizers          Reset optimizers.
+    --reset_optimizers          Reset optimizers, otherwise restored from checkpoint.
     --log-event-path=<name>     Log event path.
     -h, --help                  Show this help message and exit
 """
@@ -214,8 +214,14 @@ def get_tts_data_loaders(X, Y, X_data_min, X_data_max, Y_data_mean, Y_data_std):
 def get_selected_static_stream(y_hat_static):
     static_stream_sizes = get_static_stream_sizes(
         hp.stream_sizes, hp.has_dynamic_features, len(hp.windows))
-    return select_streams(y_hat_static, static_stream_sizes,
-                          streams=hp.adversarial_streams)
+    y_hat_selected = select_streams(y_hat_static, static_stream_sizes,
+                                    streams=hp.adversarial_streams)
+    # 0-th mgc with adversarial trainging affects speech quality
+    # ref: saito17asja_gan.pdf
+    if hp.mask_0th_mgc_for_adv_loss:
+        assert hp == hparams.tts_acoustic
+        y_hat_selected = y_hat_selected[:, :, 1:]
+    return y_hat_selected
 
 
 def update_discriminator(model_d, optimizer_d, y_static, y_hat_static, mask,
@@ -415,7 +421,7 @@ def train_loop(models, optimizers, dataset_loaders,
 
                 ### Update generator ###
                 if update_g:
-                    adv_w = float(np.clip(w_d * E_loss_mge / E_loss_adv, 0, 1e+3))
+                    adv_w = w_d * float(np.clip(E_loss_mge / E_loss_adv, 0, 1e+3))
                     loss_mse, loss_mge, loss_adv, loss_g, = update_generator(
                         model_g, model_d, optimizer_g, y, y_hat,
                         y_static, y_hat_static,
@@ -428,8 +434,12 @@ def train_loop(models, optimizers, dataset_loaders,
                     running_loss["generator"] += loss_g
 
             # Update expectation
+            # NOTE: E_loss_mge is not exactly same as E[L_mge(y,y_hat)]
+            # in thier papers, since we add MSE term in the loss.
+            # It will be same if mse_w = 0 and mge_w = 1.
             if update_d and update_g and phase == "train":
-                E_loss_mge = (running_loss["mse"] + running_loss["mge"]) / N
+                E_loss_mge = (mse_w * running_loss["mse"] +
+                              mge_w * running_loss["mge"]) / N
                 E_loss_adv = running_loss["loss_adv"] / N
                 log_value("E(mge)", E_loss_mge, global_epoch)
                 log_value("E(adv)", E_loss_adv, global_epoch)
@@ -635,7 +645,8 @@ if __name__ == "__main__":
                dataset_loaders, w_d=w_d, update_d=update_d, update_g=update_g,
                reference_discriminator=reference_discriminator,
                stream_sizes=hp.stream_sizes,
-               has_dynamic_features=hp.has_dynamic_features)
+               has_dynamic_features=hp.has_dynamic_features,
+               mse_w=mse_w, mge_w=mge_w)
 
     # Save models
     for model, optimizer, enabled, name in [
