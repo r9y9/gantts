@@ -106,7 +106,7 @@ tts_duration = tf.contrib.training.HParams(
     },
     optimizer_g="Adagrad",
     optimizer_g_params={
-        "lr": 0.02,
+        "lr": 0.01,
         "weight_decay": 1e-7,
     },
 
@@ -122,7 +122,7 @@ tts_duration = tf.contrib.training.HParams(
     },
     optimizer_d="Adagrad",
     optimizer_d_params={
-        "lr": 0.02,
+        "lr": 0.01,
         "weight_decay": 1e-7,
     },
 
@@ -130,7 +130,7 @@ tts_duration = tf.contrib.training.HParams(
     nepoch=200,
 
     # LR schedule
-    lr_decay_schedule=True,
+    lr_decay_schedule=False,
     lr_decay_epoch=25,
 
     # Datasets and data loader
@@ -179,7 +179,7 @@ tts_acoustic = tf.contrib.training.HParams(
     },
     optimizer_g="Adagrad",
     optimizer_g_params={
-        "lr": 0.02,
+        "lr": 0.01,
         "weight_decay": 1e-7,
     },
 
@@ -195,7 +195,7 @@ tts_acoustic = tf.contrib.training.HParams(
     },
     optimizer_d="Adagrad",
     optimizer_d_params={
-        "lr": 0.02,
+        "lr": 0.01,
         "weight_decay": 1e-7,
     },
 
@@ -203,7 +203,7 @@ tts_acoustic = tf.contrib.training.HParams(
     nepoch=200,
 
     # LR schedule
-    lr_decay_schedule=True,
+    lr_decay_schedule=False,
     lr_decay_epoch=25,
 
     # Datasets and data loader

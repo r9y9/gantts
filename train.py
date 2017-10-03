@@ -415,7 +415,7 @@ def train_loop(models, optimizers, dataset_loaders,
 
                 ### Update generator ###
                 if update_g:
-                    adv_w = float(w_d * E_loss_mge / E_loss_adv)
+                    adv_w = float(np.clip(w_d * E_loss_mge / E_loss_adv, 0, 1e+3))
                     loss_mse, loss_mge, loss_adv, loss_g, = update_generator(
                         model_g, model_d, optimizer_g, y, y_hat,
                         y_static, y_hat_static,
