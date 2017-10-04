@@ -113,7 +113,7 @@ tts_duration = tf.contrib.training.HParams(
     },
 
     # Discriminator
-    discriminator="LSTMRNN",
+    discriminator="MLP",
     discriminator_params={
         "in_dim": None,
         "out_dim": 1,
@@ -191,7 +191,7 @@ tts_acoustic = tf.contrib.training.HParams(
     },
 
     # Discriminator
-    discriminator="LSTMRNN",
+    discriminator="MLP",
     discriminator_params={
         "in_dim": 59,
         "out_dim": 1,
@@ -214,7 +214,7 @@ tts_acoustic = tf.contrib.training.HParams(
     lr_decay_epoch=25,
 
     # Datasets and data loader
-    batch_size=20,
+    batch_size=26,
     num_workers=2,
     pin_memory=True,
     cache_size=1200,
