@@ -1,12 +1,22 @@
 # GAN TTS
 
-PyTorch implementation of Generative adversarial Networks (GAN) based text-to-speech (TTS) and voice conversion (VC). Models, training algorithms and demos for TTS and VC using [CMU ARCTIC](http://festvox.org/cmu_arctic/) are available.
+PyTorch implementation of Generative adversarial Networks (GAN) based text-to-speech (TTS) and voice conversion (VC). Models, training algorithms and demos for both TTS and VC using [CMU ARCTIC](http://festvox.org/cmu_arctic/) are available.
+
+## Generated audio samples
+
+Audio samples are available in the Jupyter notebooks at the links below:
+
+- Voice conversion: [The effects of adversarial training in voice conversion | nbviewer](http://nbviewer.jupyter.org/github/r9y9/gantts/blob/48ef8603bf25d429538b4e68df5db864b740892e/notebooks/Test%20VC.ipynb)
+- Text-to-speech: WIP, comming soon.
+
+You can find source code for the notebooks in `notebooks` directory of the repository.
 
 ## Requirements
 
 - [PyTorch](http://pytorch.org/)
 - [TensorFlow](https://www.tensorflow.org/) (just for `tf.contrib.training.HParams`)
 - [nnmnkwii](https://github.com/r9y9/nnmnkwii)
+- Python3
 
 ## Installation
 
@@ -27,18 +37,13 @@ pip install -e ".[train]"
 - **prepare_features_vc.py**: Acoustic feature extraction script for voice conversion.
 - **prepare_features_tts.py**: Linguistic/duration/acoustic feature extraction script for TTS.
 - **train.py**: GAN-based training script. This is written to be generic so that can be used for training voice conversion models as well as text-to-speech models (duration/acoustic).
-- **hparams.py**: Hyper parameters VC and TTS experiments.
+- **train_gan.sh**: Adversarial training wrapper script for `train.py`.
+- **hparams.py**: Hyper parameters for VC and TTS experiments.
+- **evaluation_vc.py**: Evaluation script for VC.
 
 Feature extraction scripts are written for CMU ARCTIC dataset, but can be easily adapted for other datasets.
 
 ## Run demos
-
-### Text-to-speech synthesis (en)
-
-```
-./tts_demo.sh
-```
-This will download slt_arctic_full_data used in Merlin's demo, perform feature extraction and training models.
 
 ### Voice conversion (en)
 
@@ -62,6 +67,16 @@ Once you have downloaded datasets, then:
 ./vc_demo.sh ${your_cmu_arctic_data_root} # in my case, data root is `~/data/cmu_arctic`
 ```
 
+This will take 1 hour or two. You will find baseline/GAN-based generated audio samples in `generated` directory.
+
+### WIP: Text-to-speech synthesis (en)
+
+**Please note that this is work in progress.**
+
+```
+./tts_demo.sh
+```
+This will download `slt_arctic_full_data` used in Merlin's demo, perform feature extraction and train models.
 
 ## References
 
