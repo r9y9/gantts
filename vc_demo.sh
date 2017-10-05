@@ -24,3 +24,19 @@ python prepare_features_vc.py --max_files=500 ${data_dir} \
 ./train_gan.sh vc data/cmu_arctic_vc/X data/cmu_arctic_vc/Y \
     checkpoints/vc \
     50 10 50 200
+
+### Evaluation ###
+
+# Baseline
+python evaluation_vc.py \
+    ./checkpoints/vc/baseline/checkpoint_epoch200_Generator.pth \
+    data/cmu_arctic_vc/ \
+    ~/data/cmu_arctic/cmu_us_clb_arctic/wav generated/vc/baseline \
+    --diffvc
+
+# GAN
+python evaluation_vc.py \
+    ./checkpoints/vc/gan/checkpoint_epoch200_Generator.pth \
+    data/cmu_arctic_vc/ \
+    ~/data/cmu_arctic/cmu_us_clb_arctic/wav generated/vc/gan \
+    --diffvc
