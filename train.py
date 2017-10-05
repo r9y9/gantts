@@ -63,16 +63,19 @@ use_cuda = torch.cuda.is_available()
 
 
 class NPYDataSource(FileDataSource):
-    def __init__(self, dirname, train=True, max_files=None):
+    def __init__(self, dirname, train=True, max_files=None, test=False):
         self.dirname = dirname
         self.train = train
+        self.test = test
         self.max_files = max_files
 
     def collect_files(self):
         npy_files = list(filter(lambda x: splitext(x)[-1] == ".npy",
                                 os.listdir(self.dirname)))
-        npy_files = list(map(lambda d: join(self.dirname, d), npy_files))
+        npy_files = sorted(list(map(lambda d: join(self.dirname, d), npy_files)))
         # last 5 is for real testset
+        if self.test:
+            return npy_files[len(npy_files) - 5:]
         npy_files = npy_files[:len(npy_files) - 5]
         if self.max_files is not None and self.max_files > 0:
             npy_files = npy_files[:self.max_files]
@@ -454,7 +457,7 @@ def train_loop(models, optimizers, dataset_loaders,
                                 ("discriminator", update_d),
                                 ("loss_real_d", update_d),
                                 ("loss_fake_d", update_d),
-                                ("loss_adv", update_g and w_d > 0),
+                                ("loss_adv", update_g and update_d),
                                 ("generator", update_g)]:
                 if enabled:
                     ave_loss = running_loss[ty] / N
@@ -607,7 +610,7 @@ if __name__ == "__main__":
             gantts.models, hp.discriminator)(**hp.discriminator_params)
         try:
             load_checkpoint(reference_discriminator, None, checkpoint_path_r)
-        except KeyError:
+        except:
             warn("Invalid cehckpoint for reference discriminator")
             reference_discriminator = None
     else:

@@ -96,7 +96,7 @@ tts_duration = tf.contrib.training.HParams(
     mask_0th_mgc_for_adv_loss=False,
 
     # Generator
-    generator="LSTMRNN",
+    generator="MLP",
     generator_params={
         "in_dim": None,
         "out_dim": None,
@@ -112,6 +112,7 @@ tts_duration = tf.contrib.training.HParams(
         "weight_decay": 1e-7,
     },
 
+
     # Discriminator
     discriminator="MLP",
     discriminator_params={
@@ -122,7 +123,7 @@ tts_duration = tf.contrib.training.HParams(
         "dropout": 0.5,
         "last_sigmoid": True,
     },
-    optimizer_d="Adagrad",
+    optimizer_d="Adam",
     optimizer_d_params={
         "lr": 0.01,
         "weight_decay": 1e-7,
@@ -166,7 +167,7 @@ tts_acoustic = tf.contrib.training.HParams(
     # Streams used for computing adversarial loss
     # NOTE: you should probably change discriminator's `in_dim`
     # if you change the adv_streams
-    adversarial_streams=[True, False, False, False],
+    adversarial_streams=[True, True, False, False],
     # Don't switch this on unless you are sure what you are doing
     # If True, you will need to adjast `in_dim` for discriminator.
     # Rationale for this is that power coefficients are less meaningful
@@ -174,7 +175,7 @@ tts_acoustic = tf.contrib.training.HParams(
     mask_0th_mgc_for_adv_loss=True,
 
     # Generator
-    generator="LSTMRNN",
+    generator="MLP",
     generator_params={
         "in_dim": None,
         "out_dim": None,
@@ -193,7 +194,7 @@ tts_acoustic = tf.contrib.training.HParams(
     # Discriminator
     discriminator="MLP",
     discriminator_params={
-        "in_dim": 59,
+        "in_dim": 60,
         "out_dim": 1,
         "num_hidden": 2,
         "hidden_dim": 256,
@@ -215,7 +216,7 @@ tts_acoustic = tf.contrib.training.HParams(
 
     # Datasets and data loader
     batch_size=26,
-    num_workers=2,
+    num_workers=1,
     pin_memory=True,
     cache_size=1200,
 )

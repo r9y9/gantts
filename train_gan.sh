@@ -92,6 +92,6 @@ if [ "${run_adversarial}" == 1 ]; then
         --w_d=1 --hparams="nepoch=$total_epoch" \
         --checkpoint-dir=$dst_root/gan \
         --restart_epoch=${generator_warmup_epoch} \
-        --reset_optimizers $inputs_dir $outputs_dir \
+        $inputs_dir $outputs_dir \
         --log-event-path="log/${hparams_name}_adversarial_training_$randstr"
 fi

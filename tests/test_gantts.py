@@ -6,6 +6,7 @@ import torch
 from torch import nn
 from torch import optim
 from nnmnkwii.paramgen import unit_variance_mlpg_matrix
+from nnmnkwii.autograd import unit_variance_mlpg
 
 from gantts.models import In2OutHighwayNet, MLP
 from gantts.seqloss import MaskedMSELoss, sequence_mask
@@ -63,6 +64,25 @@ def test_select_streams():
         True, False, False, False]).size() == (32, 100, 60)
     assert select_streams(x, static_stream_sizes, streams=[
         True, False, False, True]).size() == (32, 100, 61)
+
+    x = torch.arange(0, 63).expand(32, 100, 63)
+    assert (select_streams(x, static_stream_sizes, streams=[
+        False, False, False, True]) == x[:, :, -1]).all()
+    assert (select_streams(x, static_stream_sizes, streams=[
+        False, False, True, False]) == x[:, :, -2]).all()
+    assert (select_streams(x, static_stream_sizes, streams=[
+        False, True, False, False]) == x[:, :, -3]).all()
+
+    # Multiple selects
+    y = select_streams(x, static_stream_sizes, streams=[
+        True, False, False, True])
+    assert (y[:, :, :60] == x[:, :, :60]).all()
+    assert (y[:, :, -1] == x[:, :, -1]).all()
+
+    y = select_streams(x, static_stream_sizes, streams=[
+        True, True, False, False])
+    assert (y[:, :, :60] == x[:, :, :60]).all()
+    assert (y[:, :, 60] == x[:, :, 60]).all()
 
 
 def test_get_static_stream_sizes():
@@ -125,6 +145,16 @@ def test_multi_stream_mlpg():
     has_dynamic_features = [True, True, False, True]
     y = multi_stream_mlpg(x, R, stream_sizes, has_dynamic_features)
     assert y.size() == (batch_size, T, 60 + 1 + 1 + 1)
+
+    mgc = y[:, :, :60]
+    lf0 = y[:, :, 60]
+    vuv = y[:, :, 61]
+    bap = y[:, :, 62]
+
+    assert (unit_variance_mlpg(R, x[:, :, :180]) == mgc).data.all()
+    assert (unit_variance_mlpg(R, x[:, :, 180:180 + 3]) == lf0).data.all()
+    assert (x[:, :, 183] == vuv).data.all()
+    assert (unit_variance_mlpg(R, x[:, :, 184:184 + 3]) == bap).data.all()
 
     static_features = get_static_features(
         x, len(windows), stream_sizes, has_dynamic_features)
