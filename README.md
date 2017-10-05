@@ -4,9 +4,9 @@ PyTorch implementation of Generative adversarial Networks (GAN) based text-to-sp
 
 ## Generated audio samples
 
-Audio samples are available in the Jupyter notebooks at the links below:
+Audio samples are available in the Jupyter notebooks at the link below:
 
-- Voice conversion: [The effects of adversarial training in voice conversion | nbviewer](http://nbviewer.jupyter.org/github/r9y9/gantts/blob/48ef8603bf25d429538b4e68df5db864b740892e/notebooks/Test%20VC.ipynb)
+- Voice conversion: [The effects of adversarial training in voice conversion | nbviewer](http://nbviewer.jupyter.org/github/r9y9/gantts/blob/master/notebooks/Test%20VC.ipynb)
 - Text-to-speech: WIP, comming soon.
 
 You can find source code for the notebooks in `notebooks` directory of the repository.
