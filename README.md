@@ -1,6 +1,8 @@
 # GAN TTS
 
-PyTorch implementation of Generative adversarial Networks (GAN) based text-to-speech (TTS) and voice conversion (VC). Models, training algorithms and demos for both TTS and VC using [CMU ARCTIC](http://festvox.org/cmu_arctic/) are available.
+PyTorch implementation of Generative adversarial Networks (GAN) based text-to-speech (TTS) and voice conversion (VC).
+
+[Yuki Saito, Shinnosuke Takamichi, Hiroshi Saruwatari, "Statistical Parametric Speech Synthesis Incorporating Generative Adversarial Networks", arXiv:1709.08041 [cs.SD], Sep. 2017](https://arxiv.org/abs/1709.08041)
 
 ## Generated audio samples
 
