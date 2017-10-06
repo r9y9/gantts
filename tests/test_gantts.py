@@ -49,23 +49,24 @@ def test_model():
     assert y.size(0) == batch_size
 
     # cuda
-    model = model.cuda()
-    x = x.cuda()
-    R = R.cuda()
-    _, y_hat = model(x, R)
+    if torch.cuda.is_available()):
+        model=model.cuda()
+        x=x.cuda()
+        R=R.cuda()
+        _, y_hat=model(x, R)
 
 
 def test_select_streams():
-    static_stream_sizes = [60, 1, 1, 1]
-    x = torch.zeros(32, 100, 63)
-    assert select_streams(x, static_stream_sizes, streams=[
+    static_stream_sizes=[60, 1, 1, 1]
+    x=torch.zeros(32, 100, 63)
+    assert select_streams(x, static_stream_sizes, streams = [
         True, True, True, True]).size() == (32, 100, 63)
-    assert select_streams(x, static_stream_sizes, streams=[
+    assert select_streams(x, static_stream_sizes, streams = [
         True, False, False, False]).size() == (32, 100, 60)
-    assert select_streams(x, static_stream_sizes, streams=[
+    assert select_streams(x, static_stream_sizes, streams = [
         True, False, False, True]).size() == (32, 100, 61)
 
-    x = torch.arange(0, 63).expand(32, 100, 63)
+    x=torch.arange(0, 63).expand(32, 100, 63)
     assert (select_streams(x, static_stream_sizes, streams=[
         False, False, False, True]) == x[:, :, -1]).all()
     assert (select_streams(x, static_stream_sizes, streams=[
@@ -74,29 +75,29 @@ def test_select_streams():
         False, True, False, False]) == x[:, :, -3]).all()
 
     # Multiple selects
-    y = select_streams(x, static_stream_sizes, streams=[
+    y=select_streams(x, static_stream_sizes, streams = [
         True, False, False, True])
     assert (y[:, :, :60] == x[:, :, :60]).all()
     assert (y[:, :, -1] == x[:, :, -1]).all()
 
-    y = select_streams(x, static_stream_sizes, streams=[
+    y=select_streams(x, static_stream_sizes, streams = [
         True, True, False, False])
     assert (y[:, :, :60] == x[:, :, :60]).all()
     assert (y[:, :, 60] == x[:, :, 60]).all()
 
 
 def test_get_static_stream_sizes():
-    stream_sizes = [180, 3, 1, 3]
-    has_dynamic_features = [True, True, False, True]
-    num_windows = 3
+    stream_sizes=[180, 3, 1, 3]
+    has_dynamic_features=[True, True, False, True]
+    num_windows=3
 
-    static_stream_sizes = get_static_stream_sizes(stream_sizes, has_dynamic_features, num_windows)
+    static_stream_sizes=get_static_stream_sizes(stream_sizes, has_dynamic_features, num_windows)
     print(static_stream_sizes)
     assert np.all(static_stream_sizes == [60, 1, 1, 1])
 
 
 def test_get_static_features():
-    windows = [
+    windows=[
         (0, 0, np.array([1.0])),
         (1, 1, np.array([-0.5, 0.0, 0.5])),
         (1, 1, np.array([1.0, -2.0, 1.0])),
@@ -115,20 +116,20 @@ def test_get_static_features():
     # 1
     assert get_static_features(
         x, len(windows), stream_sizes, has_dynamic_features,
-        streams=[True, False, False, False]).size() == (batch_size, T, 60)
+        streams = [True, False, False, False]).size() == (batch_size, T, 60)
     # 2
     assert get_static_features(
         x, len(windows), stream_sizes, has_dynamic_features,
-        streams=[False, True, False, False]).size() == (batch_size, T, 1)
+        streams = [False, True, False, False]).size() == (batch_size, T, 1)
 
     # 3
     assert get_static_features(
         x, len(windows), stream_sizes, has_dynamic_features,
-        streams=[True, False, False, True]).size() == (batch_size, T, 60 + 1)
+        streams = [True, False, False, True]).size() == (batch_size, T, 60 + 1)
 
 
 def test_multi_stream_mlpg():
-    windows = [
+    windows=[
         (0, 0, np.array([1.0])),
         (1, 1, np.array([-0.5, 0.0, 0.5])),
         (1, 1, np.array([1.0, -2.0, 1.0])),
@@ -146,15 +147,15 @@ def test_multi_stream_mlpg():
     y = multi_stream_mlpg(x, R, stream_sizes, has_dynamic_features)
     assert y.size() == (batch_size, T, 60 + 1 + 1 + 1)
 
-    mgc = y[:, :, :60]
-    lf0 = y[:, :, 60]
-    vuv = y[:, :, 61]
-    bap = y[:, :, 62]
+    mgc = y[:, : , : 60]
+    lf0 = y[: , : , 60]
+    vuv = y[: , : , 61]
+    bap = y[: , : , 62]
 
-    assert (unit_variance_mlpg(R, x[:, :, :180]) == mgc).data.all()
-    assert (unit_variance_mlpg(R, x[:, :, 180:180 + 3]) == lf0).data.all()
-    assert (x[:, :, 183] == vuv).data.all()
-    assert (unit_variance_mlpg(R, x[:, :, 184:184 + 3]) == bap).data.all()
+    assert (unit_variance_mlpg(R, x[:, : , : 180]) == mgc).data.all()
+    assert (unit_variance_mlpg(R, x[:, : , 180: 180 + 3]) == lf0).data.all()
+    assert (x[: , : , 183] == vuv).data.all()
+    assert (unit_variance_mlpg(R, x[:, : , 184: 184 + 3]) == bap).data.all()
 
     static_features = get_static_features(
         x, len(windows), stream_sizes, has_dynamic_features)
