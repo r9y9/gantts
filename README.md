@@ -80,6 +80,12 @@ This will take 1 hour or two. You will find baseline/GAN-based generated audio s
 ```
 This will download `slt_arctic_full_data` used in Merlin's demo, perform feature extraction and train models.
 
+## Monitoring training progress
+
+```
+tensorboard --logdir=log
+```
+
 ## References
 
 - [Yuki Saito, Shinnosuke Takamichi, Hiroshi Saruwatari, "Statistical Parametric Speech Synthesis Incorporating Generative Adversarial Networks", arXiv:1709.08041 [cs.SD], Sep. 2017](https://arxiv.org/abs/1709.08041)
