@@ -18,6 +18,7 @@ options:
     --restart_epoch=<N>         Restart epoch [default: -1].
     --reset_optimizers          Reset optimizers, otherwise restored from checkpoint.
     --log-event-path=<name>     Log event path.
+    --disable-slack             Disable slack message.
     -h, --help                  Show this help message and exit
 """
 from docopt import docopt
@@ -32,6 +33,7 @@ from torch.utils import data as data_utils
 from sklearn.model_selection import train_test_split
 
 import sys
+import time
 import os
 from os.path import splitext, join, abspath
 from tqdm import tqdm
@@ -499,6 +501,7 @@ def load_checkpoint(model, optimizer, checkpoint_path):
 
 
 if __name__ == "__main__":
+    since = time.time()
     args = docopt(__doc__)
     print("Command line args:\n", args)
     hp = getattr(hparams, args["--hparams_name"])
@@ -528,6 +531,7 @@ if __name__ == "__main__":
 
     reset_optimizers = args["--reset_optimizers"]
     log_event_path = args["--log-event-path"]
+    disable_slack = args["--disable-slack"]
 
     # Flags to update discriminator/generator or not
     update_d = w_d > 0
@@ -665,6 +669,27 @@ if __name__ == "__main__":
         if enabled:
             save_checkpoint(
                 model, optimizer, global_epoch, checkpoint_dir, name)
+
+    if not disable_slack and "SLACK_API_TOKEN" in os.environ:
+        from slackclient import SlackClient
+
+        print("Posting to slack...")
+        slack_token = os.environ["SLACK_API_TOKEN"]
+        sc = SlackClient(slack_token)
+
+        try:
+            sc.api_call(
+                "chat.postMessage",
+                channel="#research",
+                text="""
+Finally train.py finished! :tada:. Elapsed time: {}mins.
+Command line args:
+{}
+
+{}
+""".format((time.time() - since) // 60, args, hparams_debug_string(hp)))
+        except Exception as e:
+            print(str(e))
 
     print("Finished!")
     sys.exit(0)
