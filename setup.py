@@ -62,7 +62,7 @@ setup(name='gantts',
               "nnmnkwii",
           ],
           "test": [
-              "nnmnkwii"
+              "nnmnkwii",
               "nose",
           ],
       })
