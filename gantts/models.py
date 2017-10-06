@@ -79,7 +79,7 @@ class MLP(nn.Module):
 
 
 class LSTMRNN(nn.Module):
-    def __init__(self,  in_dim=118, out_dim=118, num_hidden=2, hidden_dim=256,
+    def __init__(self, in_dim=118, out_dim=118, num_hidden=2, hidden_dim=256,
                  bidirectional=False, dropout=0, last_sigmoid=False):
         super(LSTMRNN, self).__init__()
         self.num_direction = 2 if bidirectional else 1

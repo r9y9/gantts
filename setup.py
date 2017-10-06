@@ -45,7 +45,7 @@ class develop(setuptools.command.develop.develop):
 
 setup(name='gantts',
       version=version,
-      description='PyTorch utils for GAN-based text-to-speech and voice conversion',
+      description='PyTorch utils for GAN-based text-to-speech synthesis and voice conversion',
       packages=find_packages(),
       cmdclass={
           'build_py': build_py,

@@ -124,18 +124,7 @@ if __name__ == "__main__":
     outputs_dir = args["<outputs_dir>"]
     diffvc = args["--diffvc"]
 
-    # Generate samples for
-    # 1. Evaluation set
-    # 2. Test set
-    eval_dir = join(outputs_dir, "eval")
-    test_dir = join(outputs_dir, "test")
-    os.makedirs(eval_dir, exist_ok=True)
-    os.makedirs(test_dir, exist_ok=True)
-
-    eval_files = get_wav_files(data_dir, wav_dir, test=False)
-    test_files = get_wav_files(data_dir, wav_dir, test=True)
-
-    # Collect stast
+    # Collect stats
     data_mean = np.load(join(data_dir, "data_mean.npy"))
     data_var = np.load(join(data_dir, "data_var.npy"))
     data_std = np.sqrt(data_var)
@@ -145,12 +134,20 @@ if __name__ == "__main__":
     if hp.generator_params["out_dim"] is None:
         hp.generator_params["out_dim"] = data_mean.shape[-1]
 
+    # Model
     model = getattr(gantts.models, hp.generator)(**hp.generator_params)
+    load_checkpoint(model, None, checkpoint_path)
     print(model)
 
-    if checkpoint_path:
-        load_checkpoint(model, None, checkpoint_path)
-
+    # Generate samples for
+    # 1. Evaluation set
+    # 2. Test set
+    eval_dir = join(outputs_dir, "eval")
+    test_dir = join(outputs_dir, "test")
+    os.makedirs(eval_dir, exist_ok=True)
+    os.makedirs(test_dir, exist_ok=True)
+    eval_files = get_wav_files(data_dir, wav_dir, test=False)
+    test_files = get_wav_files(data_dir, wav_dir, test=True)
     for dst_dir, files in [(eval_dir, eval_files), (test_dir, test_files)]:
         for path in files:
             print(dst_dir, path)
