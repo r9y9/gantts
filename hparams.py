@@ -96,13 +96,13 @@ tts_duration = tf.contrib.training.HParams(
     mask_0th_mgc_for_adv_loss=False,
 
     # Generator
-    generator="MLP",
+    generator="LSTMRNN",
     generator_params={
         "in_dim": None,
         "out_dim": None,
         "num_hidden": 3,
         "hidden_dim": 512,
-        #"bidirectional": True,
+        "bidirectional": True,
         "dropout": 0.5,
         "last_sigmoid": False,
     },
@@ -120,10 +120,11 @@ tts_duration = tf.contrib.training.HParams(
         "out_dim": 1,
         "num_hidden": 2,
         "hidden_dim": 256,
+        # "bidirectional": True,
         "dropout": 0.5,
         "last_sigmoid": True,
     },
-    optimizer_d="Adam",
+    optimizer_d="Adagrad",
     optimizer_d_params={
         "lr": 0.01,
         "weight_decay": 1e-7,
@@ -161,6 +162,7 @@ tts_acoustic = tf.contrib.training.HParams(
         (1, 1, np.array([1.0, -2.0, 1.0])),
     ],
     # Stream info
+    # (mgc, lf0, vuv, bap)
     stream_sizes=[180, 3, 1, 3],
     has_dynamic_features=[True, True, False, True],
 

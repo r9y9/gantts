@@ -314,12 +314,25 @@ def exp_lr_scheduler(optimizer, epoch, nepoch, init_lr=0.0001, lr_decay_epoch=10
     return optimizer
 
 
+def apply_generator(x, R, lengths):
+    if hp.stream_sizes is not None:
+        # Case: generic models (can be sequence model)
+        assert hp.has_dynamic_features is not None
+        y_hat = model_g(x, lengths=lengths)
+        y_hat_static = multi_stream_mlpg(
+            y_hat, R, hp.stream_sizes, hp.has_dynamic_features)
+    else:
+        # Case: models include parameter generation in itself
+        # Mulistream features cannot be used in this case
+        y_hat, y_hat_static = model_g(x, R, lengths=lengths)
+
+    return y_hat, y_hat_static
+
+
 def train_loop(models, optimizers, dataset_loaders,
                w_d=0.0, mse_w=0.0, mge_w=1.0,
                update_d=True, update_g=True,
-               reference_discriminator=None,
-               stream_sizes=None,
-               has_dynamic_features=None):
+               reference_discriminator=None):
     model_g, model_d = models
     optimizer_g, optimizer_d = optimizers
     if use_cuda:
@@ -365,6 +378,7 @@ def train_loop(models, optimizers, dataset_loaders,
                 x, y = x[indices], y[indices]
 
                 # MLPG paramgen matrix
+                # TODO: create this only if it's needed
                 R = unit_variance_mlpg_matrix(hp.windows, max_len)
                 R = torch.from_numpy(R)
 
@@ -378,7 +392,7 @@ def train_loop(models, optimizers, dataset_loaders,
 
                 # Static features
                 y_static = get_static_features(
-                    y, len(hp.windows), stream_sizes, has_dynamic_features)
+                    y, len(hp.windows), hp.stream_sizes, hp.has_dynamic_features)
 
                 # Num frames in batch
                 total_num_frames += sorted_lengths.float().sum().data[0]
@@ -391,16 +405,7 @@ def train_loop(models, optimizers, dataset_loaders,
                 optimizer_d.zero_grad()
 
                 # Apply model (generator)
-                if stream_sizes is not None:
-                    # Case: generic models (can be sequence model)
-                    assert has_dynamic_features is not None
-                    y_hat = model_g(x, lengths=sorted_lengths)
-                    y_hat_static = multi_stream_mlpg(
-                        y_hat, R, stream_sizes, has_dynamic_features)
-                else:
-                    # Case: models include parameter generation in itself
-                    # Mulistream features cannot be used in this case
-                    y_hat, y_hat_static = model_g(x, R, lengths=sorted_lengths)
+                y_hat, y_hat_static = apply_generator(x, R, sorted_lengths)
 
                 # Compute spoofing rate
                 if reference_discriminator is not None:
@@ -430,11 +435,20 @@ def train_loop(models, optimizers, dataset_loaders,
                 ### Update generator ###
                 if update_g:
                     adv_w = w_d * float(np.clip(E_loss_mge / E_loss_adv, 0, 1e+3))
-                    loss_mse, loss_mge, loss_adv, loss_g = update_generator(
-                        model_g, model_d, optimizer_g, y, y_hat,
-                        y_static, y_hat_static,
-                        adv_w, sorted_lengths, mask, phase,
-                        mse_w=mse_w, mge_w=mge_w)
+                    # update generator $step times for adversarial training
+                    # TODO: configuarable
+                    step = 2 if update_d and phase == "train" else 1
+                    while True:
+                        loss_mse, loss_mge, loss_adv, loss_g = update_generator(
+                            model_g, model_d, optimizer_g, y, y_hat,
+                            y_static, y_hat_static,
+                            adv_w, sorted_lengths, mask, phase,
+                            mse_w=mse_w, mge_w=mge_w)
+                        step -= 1
+                        if step <= 0:
+                            break
+                        # Update outputs
+                        y_hat, y_hat_static = apply_generator(x, R, sorted_lengths)
 
                     running_loss["mse"] += loss_mse
                     running_loss["mge"] += loss_mge
@@ -658,8 +672,6 @@ if __name__ == "__main__":
     train_loop((model_g, model_d), (optimizer_g, optimizer_d),
                dataset_loaders, w_d=w_d, update_d=update_d, update_g=update_g,
                reference_discriminator=reference_discriminator,
-               stream_sizes=hp.stream_sizes,
-               has_dynamic_features=hp.has_dynamic_features,
                mse_w=mse_w, mge_w=mge_w)
 
     # Save models
