@@ -24,7 +24,7 @@ class In2OutHighwayNet(nn.Module):
                  num_hidden=3, hidden_dim=512, dropout=0.5):
         super(In2OutHighwayNet, self).__init__()
         self.static_dim = static_dim
-        self.relu = nn.LeakyReLU()
+        self.relu = nn.LeakyReLU(inplace=True)
         self.sigmoid = nn.Sigmoid()
         # Transform gate (can be deep?)
         self.T = nn.Linear(static_dim, static_dim)
@@ -66,7 +66,7 @@ class MLP(nn.Module):
             [nn.Linear(in_size, out_size) for (in_size, out_size)
              in zip(in_sizes, out_sizes)])
         self.last_linear = nn.Linear(hidden_dim, out_dim)
-        self.relu = nn.LeakyReLU()
+        self.relu = nn.LeakyReLU(inplace=True)
         self.sigmoid = nn.Sigmoid()
         self.dropout = nn.Dropout(dropout)
         self.last_sigmoid = last_sigmoid
