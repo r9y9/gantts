@@ -35,6 +35,7 @@ from sklearn.model_selection import train_test_split
 import sys
 import time
 import os
+import math
 from os.path import splitext, join, abspath
 from tqdm import tqdm
 from warnings import warn
@@ -330,7 +331,7 @@ def apply_generator(x, R, lengths):
     return y_hat, y_hat_static
 
 
-def inv_scale(mgc, lf0, vuv, bap, Y_mean, Y_std):
+def inv_scale(mgc, lf0, vuv, bap, Y_mean, Y_std, binalize_vuv=True):
     # static + dynamic domain
     mgc_dim, lf0_dim, vuv_dim, bap_dim = hp.stream_sizes
     windows = hp.windows
@@ -347,6 +348,10 @@ def inv_scale(mgc, lf0, vuv, bap, Y_mean, Y_std):
     bap = P.inv_scale(bap, Y_mean[bap_start_idx:bap_start_idx + bap_dim // len(windows)],
                       Y_std[bap_start_idx:bap_start_idx + bap_dim // len(windows)])
     vuv = P.inv_scale(vuv, Y_mean[vuv_start_idx], Y_std[vuv_start_idx])
+    if binalize_vuv:
+        vuv[vuv > 0.5] = 1.0
+        vuv[vuv <= 0.5] = 0
+        vuv = vuv.long()
 
     return mgc, lf0, vuv, bap
 
@@ -367,12 +372,33 @@ def split_streams(y_static, Y_data_mean, Y_data_std):
     return inv_scale(mgc, lf0, vuv, bap, Y_data_mean, Y_data_std)
 
 
-def compute_acoustic_distortions(y_static, y_hat_static,
-                                 Y_data_mean, Y_data_std):
-    mgc, lf0, vuv, bap = split_streams(y_static, Y_data_mean, Y_data_std)
-    mgc_hat, lf0_hat, vuv_hat, bap_hat = split_streams(y_hat_static, Y_data_mean, Y_data_std)
-    return metrics.melcd(mgc[:, :, 1:], mgc_hat[:, :, 1:]), \
-        metrics.melcd(bap, bap_hat) / 10.0
+def compute_distortions(y_static, y_hat_static, Y_data_mean, Y_data_std):
+    if hp.name == "acoustic":
+        mgc, lf0, vuv, bap = split_streams(y_static, Y_data_mean, Y_data_std)
+        mgc_hat, lf0_hat, vuv_hat, bap_hat = split_streams(
+            y_hat_static, Y_data_mean, Y_data_std)
+        distortions = {
+            "mcd": metrics.melcd(mgc[:, :, 1:], mgc_hat[:, :, 1:]),
+            "bap_mcd": metrics.melcd(bap, bap_hat) / 10.0,
+            "f0_mse": metrics.lf0_mean_squared_error(lf0, vuv, lf0_hat, vuv_hat,
+                                                     linear_domain=True),
+            "vuv_err": metrics.vuv_error(vuv, vuv_hat),
+        }
+    elif hp.name == "duration":
+        y_static_invscale = P.inv_scale(y_static, Y_data_mean, Y_data_std)
+        y_hat_static_invscale = P.inv_scale(y_hat_static, Y_data_mean, Y_data_std)
+        distortions = {"dur_rmse": math.sqrt(metrics.mean_squared_error(
+            y_static_invscale, y_hat_static_invscale))}
+    elif hp.name == "vc":
+        static_dim = hp.order
+        y_static_invscale = P.inv_scale(y_static, Y_data_mean[:static_dim], Y_data_std[:static_dim])
+        y_hat_static_invscale = P.inv_scale(
+            y_hat_static, Y_data_mean[:static_dim], Y_data_std[:static_dim])
+        distortions = {"mcd": metrics.melcd(mgc, mgc_hat)}
+    else:
+        assert False
+
+    return distortions
 
 
 def train_loop(models, optimizers, dataset_loaders,
@@ -399,7 +425,7 @@ def train_loop(models, optimizers, dataset_loaders,
 
     E_loss_mge = 1
     E_loss_adv = 1
-    is_multistream = hp.stream_sizes is not None and len(hp.stream_sizes) > 1
+    is_acoustic = hp.name == "acoustic"
     global global_epoch
     for global_epoch in tqdm(range(global_epoch + 1, hp.nepoch + 1)):
         # LR schedule
@@ -418,7 +444,7 @@ def train_loop(models, optimizers, dataset_loaders,
                             "loss_fake_d": 0.0,
                             "loss_adv": 0.0,
                             "discriminator": 0.0}
-            running_metrics = {"mcd": 0.0, "bap_mcd": 0.0}
+            running_metrics = {}
             real_correct_count, fake_correct_count = 0, 0
             regard_fake_as_natural = 0
             N = len(dataset_loaders[phase])
@@ -512,13 +538,14 @@ def train_loop(models, optimizers, dataset_loaders,
                     running_loss["generator"] += loss_g
 
                     # Distotions
-                    # TODO: duration
-                    if is_multistream:
-                        mcd, bap_mcd = compute_acoustic_distortions(
-                            y_static.data, y_hat_static.data,
-                            Y_data_mean, Y_data_std)
-                        running_metrics["mcd"] += float(mcd)
-                        running_metrics["bap_mcd"] += float(bap_mcd)
+                    distortions = compute_distortions(
+                        y_static.data, y_hat_static.data,
+                        Y_data_mean, Y_data_std)
+                    for k, v in distortions.items():
+                        try:
+                            running_metrics[k] += float(v)
+                        except KeyError:
+                            running_metrics[k] = float(v)
 
             # Update expectation
             # NOTE: E_loss_mge is not exactly same as E[L_mge(y,y_hat)]
@@ -546,12 +573,9 @@ def train_loop(models, optimizers, dataset_loaders,
                         "{} {} loss".format(phase, ty), ave_loss, global_epoch)
 
             # Log eval metrics
-            for ty, enabled in [("mcd", update_g and is_multistream),
-                                ("bap_mcd", update_g and is_multistream)]:
-                if enabled:
-                    ave_metric = running_metrics[ty] / N
-                    log_value(
-                        "{} {} metric".format(phase, ty), ave_metric, global_epoch)
+            for k, v in running_metrics.items():
+                log_value(
+                    "{} {} metric".format(phase, k), v / N, global_epoch)
 
             # Log discriminator classification accuracy
             if update_d:
