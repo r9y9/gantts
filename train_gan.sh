@@ -9,9 +9,12 @@ generator_warmup_epoch=$5
 discriminator_warmup_epoch=$6
 spoofing_total_epoch=$7
 total_epoch=$8
+experiment_id=$9
 
 randstr=$(python -c "from datetime import datetime; print(str(datetime.now()).replace(' ', '_'))")
+randstr=${experiment_id}_${randstr}
 
+echo "Experiment id:" $experiment_id
 echo "Name of hyper paramters:" $hparams_name
 echo "Network inputs directory:" $inputs_dir
 echo "Network outputs directory:" $outputs_dir

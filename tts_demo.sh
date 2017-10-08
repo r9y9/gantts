@@ -4,9 +4,13 @@
 
 set -e
 
+experiment_id=$1
+
 # Flags
 run_duration_training=1
 run_acoustic_training=1
+generated_audio_dir=./generated/${experiment_id}
+checkpoints_dir=./checkpoints/${experiment_id}
 
 # Download merin's demo data
 ./nnmnkwii_gallery/scripts/download_data.sh slt_arctic_full_data
@@ -14,10 +18,10 @@ run_acoustic_training=1
 
 # Linguistic/duration/acoustic feature extraction
 # for all data.
-dst_dir=./data/cmu_arctic_tts
-python prepare_features_tts.py --max_files=-1 \
-    ./nnmnkwii_gallery/data/slt_arctic_full_data/ \
-    --dst_dir=${dst_dir}
+data_dir=./data/cmu_arctic_tts_order24
+#python prepare_features_tts.py --max_files=-1 \
+#    ./nnmnkwii_gallery/data/slt_arctic_full_data/ \
+#    --dst_dir=${data_dir}
 
 
 # train_gan.sh args:
@@ -25,25 +29,37 @@ python prepare_features_tts.py --max_files=-1 \
 # 2. X: Network inputs
 # 3. Y: Network outputs
 # 4. Where to save checkpoints
+#
 # 5. Generator wamup epoch
-# 6.discriminator_warmup_epoch
+# 6. discriminator_warmup_epoch
 # 7. Total epoch for spoofing model training
 # 8. Total epoch for GAN
 
 # Train duration model
 if [ "$run_duration_training" == 1 ]; then
     ./train_gan.sh tts_duration \
-        data/cmu_arctic_tts/X_duration/ \
-        data/cmu_arctic_tts/Y_duration/ \
-        checkpoints/tts_duration \
-        50 5 50 100
+        ${data_dir}/X_duration/ \
+        ${data_dir}/Y_duration/ \
+        ${checkpoints_dir}/tts_duration \
+        50 5 10 100 $experiment_id
 fi
 
 # Train acoustic model
 if [ "$run_acoustic_training" == 1 ]; then
     ./train_gan.sh tts_acoustic \
-        data/cmu_arctic_tts/X_acoustic/ \
-        data/cmu_arctic_tts/Y_acoustic/ \
-        checkpoints/tts_acoustic \
-        50 5 20 100
+        ${data_dir}/X_acoustic/ \
+        ${data_dir}/Y_acoustic/ \
+        ${checkpoints_dir}/tts_acoustic \
+        50 5 10 100 $experiment_id
 fi
+
+# Generate audio samples for eval and test set
+for ty in baseline gan
+do
+    python evaluation_tts.py \
+        ${checkpoints_dir}/tts_acoustic/$ty/checkpoint_epoch100_Generator.pth \
+        ${checkpoints_dir}/tts_duration/$ty/checkpoint_epoch100_Generator.pth \
+        ${data_dir} \
+        ./nnmnkwii_gallery/data/slt_arctic_full_data/label_state_align/ \
+        ${generated_audio_dir}/$ty
+done

@@ -154,7 +154,7 @@ tts_acoustic = tf.contrib.training.HParams(
                        "questions-radio_dnn_416.hed"),
 
     # Acoustic features
-    order=59,
+    order=24,
     frame_period=5,
     windows=[
         (0, 0, np.array([1.0])),
@@ -163,13 +163,13 @@ tts_acoustic = tf.contrib.training.HParams(
     ],
     # Stream info
     # (mgc, lf0, vuv, bap)
-    stream_sizes=[180, 3, 1, 3],
+    stream_sizes=[75, 3, 1, 3],
     has_dynamic_features=[True, True, False, True],
 
     # Streams used for computing adversarial loss
     # NOTE: you should probably change discriminator's `in_dim`
     # if you change the adv_streams
-    adversarial_streams=[True, True, False, False],
+    adversarial_streams=[True, False, False, False],
     # Don't switch this on unless you are sure what you are doing
     # If True, you will need to adjast `in_dim` for discriminator.
     # Rationale for this is that power coefficients are less meaningful
@@ -196,7 +196,7 @@ tts_acoustic = tf.contrib.training.HParams(
     # Discriminator
     discriminator="MLP",
     discriminator_params={
-        "in_dim": 60,
+        "in_dim": 24,
         "out_dim": 1,
         "num_hidden": 2,
         "hidden_dim": 256,

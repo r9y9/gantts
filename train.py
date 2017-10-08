@@ -43,6 +43,7 @@ import tensorboard_logger
 from tensorboard_logger import log_value
 
 from nnmnkwii import preprocessing as P
+from nnmnkwii import metrics
 from nnmnkwii.paramgen import unit_variance_mlpg_matrix
 from nnmnkwii.datasets import FileSourceDataset, FileDataSource
 from nnmnkwii.datasets import MemoryCacheDataset
@@ -329,6 +330,51 @@ def apply_generator(x, R, lengths):
     return y_hat, y_hat_static
 
 
+def inv_scale(mgc, lf0, vuv, bap, Y_mean, Y_std):
+    # static + dynamic domain
+    mgc_dim, lf0_dim, vuv_dim, bap_dim = hp.stream_sizes
+    windows = hp.windows
+
+    mgc_start_idx = 0
+    lf0_start_idx = mgc_dim
+    vuv_start_idx = lf0_start_idx + lf0_dim
+    bap_start_idx = vuv_start_idx + vuv_dim
+
+    mgc = P.inv_scale(mgc, Y_mean[:mgc_dim // len(windows)],
+                      Y_std[:mgc_dim // len(windows)])
+    lf0 = P.inv_scale(lf0, Y_mean[lf0_start_idx:lf0_start_idx + lf0_dim // len(windows)],
+                      Y_std[lf0_start_idx:lf0_start_idx + lf0_dim // len(windows)])
+    bap = P.inv_scale(bap, Y_mean[bap_start_idx:bap_start_idx + bap_dim // len(windows)],
+                      Y_std[bap_start_idx:bap_start_idx + bap_dim // len(windows)])
+    vuv = P.inv_scale(vuv, Y_mean[vuv_start_idx], Y_std[vuv_start_idx])
+
+    return mgc, lf0, vuv, bap
+
+
+def split_streams(y_static, Y_data_mean, Y_data_std):
+    # static domain
+    mgc_dim, lf0_dim, vuv_dim, bap_dim = get_static_stream_sizes(
+        hp.stream_sizes, hp.has_dynamic_features, len(hp.windows))
+    mgc_start_idx = 0
+    lf0_start_idx = mgc_dim
+    vuv_start_idx = lf0_start_idx + lf0_dim
+    bap_start_idx = vuv_start_idx + vuv_dim
+    mgc = y_static[:, :, :lf0_start_idx]
+    lf0 = y_static[:, :, lf0_start_idx:vuv_start_idx]
+    vuv = y_static[:, :, vuv_start_idx]
+    bap = y_static[:, :, bap_start_idx:]
+
+    return inv_scale(mgc, lf0, vuv, bap, Y_data_mean, Y_data_std)
+
+
+def compute_acoustic_distortions(y_static, y_hat_static,
+                                 Y_data_mean, Y_data_std):
+    mgc, lf0, vuv, bap = split_streams(y_static, Y_data_mean, Y_data_std)
+    mgc_hat, lf0_hat, vuv_hat, bap_hat = split_streams(y_hat_static, Y_data_mean, Y_data_std)
+    return metrics.melcd(mgc[:, :, 1:], mgc_hat[:, :, 1:]), \
+        metrics.melcd(bap, bap_hat) / 10.0
+
+
 def train_loop(models, optimizers, dataset_loaders,
                w_d=0.0, mse_w=0.0, mge_w=1.0,
                update_d=True, update_g=True,
@@ -343,8 +389,17 @@ def train_loop(models, optimizers, dataset_loaders,
     model_g.train()
     model_d.train()
 
+    Y_data_mean = dataset_loaders["train"].dataset.Y_data_mean
+    Y_data_std = dataset_loaders["train"].dataset.Y_data_std
+    Y_data_mean = torch.from_numpy(Y_data_mean)
+    Y_data_std = torch.from_numpy(Y_data_std)
+    if use_cuda:
+        Y_data_mean = Y_data_mean.cuda()
+        Y_data_std = Y_data_std.cuda()
+
     E_loss_mge = 1
     E_loss_adv = 1
+    is_multistream = hp.stream_sizes is not None and len(hp.stream_sizes) > 1
     global global_epoch
     for global_epoch in tqdm(range(global_epoch + 1, hp.nepoch + 1)):
         # LR schedule
@@ -363,6 +418,7 @@ def train_loop(models, optimizers, dataset_loaders,
                             "loss_fake_d": 0.0,
                             "loss_adv": 0.0,
                             "discriminator": 0.0}
+            running_metrics = {"mcd": 0.0, "bap_mcd": 0.0}
             real_correct_count, fake_correct_count = 0, 0
             regard_fake_as_natural = 0
             N = len(dataset_loaders[phase])
@@ -455,6 +511,15 @@ def train_loop(models, optimizers, dataset_loaders,
                     running_loss["loss_adv"] += loss_adv
                     running_loss["generator"] += loss_g
 
+                    # Distotions
+                    # TODO: duration
+                    if is_multistream:
+                        mcd, bap_mcd = compute_acoustic_distortions(
+                            y_static.data, y_hat_static.data,
+                            Y_data_mean, Y_data_std)
+                        running_metrics["mcd"] += float(mcd)
+                        running_metrics["bap_mcd"] += float(bap_mcd)
+
             # Update expectation
             # NOTE: E_loss_mge is not exactly same as E[L_mge(y,y_hat)]
             # in thier papers, since we add MSE term in the loss.
@@ -479,6 +544,14 @@ def train_loop(models, optimizers, dataset_loaders,
                     ave_loss = running_loss[ty] / N
                     log_value(
                         "{} {} loss".format(phase, ty), ave_loss, global_epoch)
+
+            # Log eval metrics
+            for ty, enabled in [("mcd", update_g and is_multistream),
+                                ("bap_mcd", update_g and is_multistream)]:
+                if enabled:
+                    ave_metric = running_metrics[ty] / N
+                    log_value(
+                        "{} {} metric".format(phase, ty), ave_metric, global_epoch)
 
             # Log discriminator classification accuracy
             if update_d:

@@ -266,9 +266,9 @@ if __name__ == "__main__":
     os.makedirs(eval_dir, exist_ok=True)
     os.makedirs(test_dir, exist_ok=True)
 
-    eval_files = get_lab_files(data_dir, labels_dir, test=False)
-    test_files = get_lab_files(data_dir, labels_dir, test=True)
-    for dst_dir, files in [(eval_dir, eval_files), (test_dir, test_files)]:
+    eval_lab_files = get_lab_files(data_dir, labels_dir, test=False)
+    test_lab_files = get_lab_files(data_dir, labels_dir, test=True)
+    for dst_dir, files in [(eval_dir, eval_lab_files), (test_dir, test_lab_files)]:
         for label_path in files:
             print(dst_dir, label_path)
             name = splitext(basename(label_path))[0]
