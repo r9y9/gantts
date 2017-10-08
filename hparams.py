@@ -14,6 +14,8 @@ def hparams_debug_string(params):
 
 # Hyper parameters for voice conversion
 vc = tf.contrib.training.HParams(
+    name="vc",
+
     # Acoustic features
     order=59,
     frame_period=5,
@@ -77,6 +79,8 @@ vc = tf.contrib.training.HParams(
 
 # Hyper paramters for TTS duration model
 tts_duration = tf.contrib.training.HParams(
+    name="duration",
+
     # Linguistic features
     use_phone_alignment=False,
     subphone_features=None,
@@ -109,7 +113,7 @@ tts_duration = tf.contrib.training.HParams(
     optimizer_g="Adagrad",
     optimizer_g_params={
         "lr": 0.01,
-        "weight_decay": 1e-7,
+        "weight_decay": 1e-5,
     },
 
 
@@ -127,7 +131,7 @@ tts_duration = tf.contrib.training.HParams(
     optimizer_d="Adagrad",
     optimizer_d_params={
         "lr": 0.01,
-        "weight_decay": 1e-7,
+        "weight_decay": 1e-5,
     },
 
     # This should be overrided
@@ -146,6 +150,8 @@ tts_duration = tf.contrib.training.HParams(
 
 # Hyper paramters for TTS acoustic model
 tts_acoustic = tf.contrib.training.HParams(
+    name="acoustic",
+
     # Linguistic
     use_phone_alignment=False,
     subphone_features="full",
@@ -190,7 +196,7 @@ tts_acoustic = tf.contrib.training.HParams(
     optimizer_g="Adagrad",
     optimizer_g_params={
         "lr": 0.01,
-        "weight_decay": 1e-7,
+        "weight_decay": 1e-5,
     },
 
     # Discriminator
@@ -206,7 +212,7 @@ tts_acoustic = tf.contrib.training.HParams(
     optimizer_d="Adagrad",
     optimizer_d_params={
         "lr": 0.01,
-        "weight_decay": 1e-7,
+        "weight_decay": 1e-5,
     },
 
     # This should be overrided
