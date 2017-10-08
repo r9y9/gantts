@@ -11,7 +11,7 @@ PyTorch implementation of Generative adversarial Networks (GAN) based text-to-sp
 Audio samples are available in the Jupyter notebooks at the link below:
 
 - Voice conversion: [The effects of adversarial training in voice conversion | nbviewer](http://nbviewer.jupyter.org/github/r9y9/gantts/blob/master/notebooks/Test%20VC.ipynb)
-- Text-to-speech: WIP, comming soon.
+- Text-to-speech: [The effects of adversarial training in text-to-speech synthesis](http://nbviewer.jupyter.org/github/r9y9/gantts/blob/master/notebooks/Test%20TTS.ipynb)
 
 You can find source code for the notebooks in `notebooks` directory of the repository.
 
@@ -19,7 +19,7 @@ You can find source code for the notebooks in `notebooks` directory of the repos
 
 - [PyTorch](http://pytorch.org/)
 - [TensorFlow](https://www.tensorflow.org/) (just for `tf.contrib.training.HParams`)
-- [nnmnkwii](https://github.com/r9y9/nnmnkwii)
+- [nnmnkwii](https://github.com/r9y9/nnmnkwii) (master)
 - Python3
 
 ## Installation
@@ -44,6 +44,7 @@ pip install -e ".[train]"
 - **train_gan.sh**: Adversarial training wrapper script for `train.py`.
 - **hparams.py**: Hyper parameters for VC and TTS experiments.
 - **evaluation_vc.py**: Evaluation script for VC.
+- **evaluation_tts.py**: Evaluation script for TTS.
 
 Feature extraction scripts are written for CMU ARCTIC dataset, but can be easily adapted for other datasets.
 
@@ -51,7 +52,7 @@ Feature extraction scripts are written for CMU ARCTIC dataset, but can be easily
 
 ### Voice conversion (en)
 
-Please download [CMU ARCTIC](http://festvox.org/cmu_arctic/) datasets, at least for two speakers (e.g., `clb`, `slt`) and check that you have all data in a directory as follows:
+`vc_demo.sh` is a `clb` to `clt` voice conversion demo script. Before running the script, please download wav files for `clb` and `slt` from [CMU ARCTIC](http://festvox.org/cmu_arctic/) and check that you have all data in a directory as follows:
 
 ```
 > tree ~/data/cmu_arctic/ -d -L 1
@@ -73,14 +74,23 @@ Once you have downloaded datasets, then:
 
 This will take 1 hour or two. You will find baseline/GAN-based generated audio samples in `generated` directory.
 
-### WIP: Text-to-speech synthesis (en)
+### Text-to-speech synthesis (en)
 
-**Please note that this is work in progress.**
+`tts_demo.sh` is a self-contained TTS demo script. The usage is:
 
 ```
-./tts_demo.sh
+./tts_demo.sh ${experimental_id}
 ```
-This will download `slt_arctic_full_data` used in Merlin's demo, perform feature extraction and train models.
+
+This will download `slt_arctic_full_data` used in Merlin's demo, perform feature extraction, train models and synthesize audio samples for eval/test set. `${experimenta_id}` can be arbitrary string, for example,
+
+```
+./tts_demo.sh tts_test
+```
+
+
+Model chechpoints will be saved at `./checkpoints/${experimental_id}` and audio samples
+are saved at `./generated/${experimental_id}`.
 
 ## Monitoring training progress
 

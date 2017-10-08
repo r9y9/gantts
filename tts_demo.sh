@@ -50,16 +50,22 @@ if [ "$run_acoustic_training" == 1 ]; then
         ${data_dir}/X_acoustic/ \
         ${data_dir}/Y_acoustic/ \
         ${checkpoints_dir}/tts_acoustic \
-        50 5 10 100 $experiment_id
+        25 5 10 50 $experiment_id
 fi
 
 # Generate audio samples for eval and test set
 for ty in baseline gan
 do
     python evaluation_tts.py \
-        ${checkpoints_dir}/tts_acoustic/$ty/checkpoint_epoch100_Generator.pth \
+        ${checkpoints_dir}/tts_acoustic/$ty/checkpoint_epoch50_Generator.pth \
         ${checkpoints_dir}/tts_duration/$ty/checkpoint_epoch100_Generator.pth \
         ${data_dir} \
         ./nnmnkwii_gallery/data/slt_arctic_full_data/label_state_align/ \
-        ${generated_audio_dir}/$ty
+        ${generated_audio_dir}/duration_acousic/$ty
+    python evaluation_tts.py \
+        ${checkpoints_dir}/tts_acoustic/$ty/checkpoint_epoch50_Generator.pth \
+        ${checkpoints_dir}/tts_duration/$ty/checkpoint_epoch100_Generator.pth \
+        ${data_dir} \
+        ./nnmnkwii_gallery/data/slt_arctic_full_data/label_state_align/ \
+        ${generated_audio_dir}/acoustic_only/$ty --disable-duraton-gen
 done
