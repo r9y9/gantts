@@ -19,9 +19,10 @@ checkpoints_dir=./checkpoints/${experiment_id}
 # Linguistic/duration/acoustic feature extraction
 # for all data.
 data_dir=./data/cmu_arctic_tts_order24
-#python prepare_features_tts.py --max_files=-1 \
-#    ./nnmnkwii_gallery/data/slt_arctic_full_data/ \
-#    --dst_dir=${data_dir}
+# data_dir=./data/cmu_arctic_tts_order59
+python prepare_features_tts.py --max_files=-1 \
+    ./nnmnkwii_gallery/data/slt_arctic_full_data/ \
+    --dst_dir=${data_dir}
 
 
 # train_gan.sh args:
