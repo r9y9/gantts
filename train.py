@@ -372,29 +372,30 @@ def split_streams(y_static, Y_data_mean, Y_data_std):
     return inv_scale(mgc, lf0, vuv, bap, Y_data_mean, Y_data_std)
 
 
-def compute_distortions(y_static, y_hat_static, Y_data_mean, Y_data_std):
+def compute_distortions(y_static, y_hat_static, Y_data_mean, Y_data_std, lengths=None):
     if hp.name == "acoustic":
         mgc, lf0, vuv, bap = split_streams(y_static, Y_data_mean, Y_data_std)
         mgc_hat, lf0_hat, vuv_hat, bap_hat = split_streams(
             y_hat_static, Y_data_mean, Y_data_std)
         distortions = {
-            "mcd": metrics.melcd(mgc[:, :, 1:], mgc_hat[:, :, 1:]),
-            "bap_mcd": metrics.melcd(bap, bap_hat) / 10.0,
-            "f0_mse": metrics.lf0_mean_squared_error(lf0, vuv, lf0_hat, vuv_hat,
-                                                     linear_domain=True),
-            "vuv_err": metrics.vuv_error(vuv, vuv_hat),
+            "mcd": metrics.melcd(mgc[:, :, 1:], mgc_hat[:, :, 1:], lengths=lengths),
+            "bap_mcd": metrics.melcd(bap, bap_hat, lengths=lengths) / 10.0,
+            "f0_mse": metrics.lf0_mean_squared_error(
+                lf0, vuv, lf0_hat, vuv_hat,
+                lengths=lengths, linear_domain=True),
+            "vuv_err": metrics.vuv_error(vuv, vuv_hat, lengths=lengths),
         }
     elif hp.name == "duration":
         y_static_invscale = P.inv_scale(y_static, Y_data_mean, Y_data_std)
         y_hat_static_invscale = P.inv_scale(y_hat_static, Y_data_mean, Y_data_std)
         distortions = {"dur_rmse": math.sqrt(metrics.mean_squared_error(
-            y_static_invscale, y_hat_static_invscale))}
+            y_static_invscale, y_hat_static_invscale, lengths=lengths))}
     elif hp.name == "vc":
         static_dim = hp.order
         y_static_invscale = P.inv_scale(y_static, Y_data_mean[:static_dim], Y_data_std[:static_dim])
         y_hat_static_invscale = P.inv_scale(
             y_hat_static, Y_data_mean[:static_dim], Y_data_std[:static_dim])
-        distortions = {"mcd": metrics.melcd(mgc, mgc_hat)}
+        distortions = {"mcd": metrics.melcd(mgc, mgc_hat, lengths=lengths)}
     else:
         assert False
 
@@ -540,7 +541,7 @@ def train_loop(models, optimizers, dataset_loaders,
                     # Distotions
                     distortions = compute_distortions(
                         y_static.data, y_hat_static.data,
-                        Y_data_mean, Y_data_std)
+                        Y_data_mean, Y_data_std, sorted_lengths.data)
                     for k, v in distortions.items():
                         try:
                             running_metrics[k] += float(v)
