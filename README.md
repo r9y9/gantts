@@ -19,7 +19,7 @@ You can find source code for the notebooks in `notebooks` directory of the repos
 
 - [PyTorch](http://pytorch.org/)
 - [TensorFlow](https://www.tensorflow.org/) (just for `tf.contrib.training.HParams`)
-- [nnmnkwii](https://github.com/r9y9/nnmnkwii) (master)
+- [nnmnkwii](https://github.com/r9y9/nnmnkwii)
 - Python3
 
 ## Installation
