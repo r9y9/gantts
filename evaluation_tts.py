@@ -5,6 +5,7 @@ usage: evaluation_vc.py [options] <acoustic_checkpoint> <duration_checkpoint> \
     <data_dir> <labels_dir> <outputs_dir>
 
 options:
+    --fs=<fs>                   Sampling frequency [default: 16000].
     --disable-duraton-gen       Disable duration generation.
     --post-filter               Apply Merlin's post filter to spectral features.
     -h, --help                  Show this help message and exit.
@@ -148,7 +149,7 @@ def gen_duration(label_path, duration_model, X_min, X_max, Y_mean, Y_std):
 
 def tts_from_label(models, label_path, X_min, X_max, Y_mean, Y_std,
                    post_filter=False,
-                   apply_duration_model=True):
+                   apply_duration_model=True, fs=16000):
     duration_model, acoustic_model = models["duration"], models["acoustic"]
 
     # Predict durations
@@ -185,7 +186,7 @@ def tts_from_label(models, label_path, X_min, X_max, Y_mean, Y_std,
         acoustic_predicted = acoustic_model(x, [xl]).data.numpy()
         acoustic_predicted = acoustic_predicted.reshape(-1, acoustic_predicted.shape[-1])
 
-    return gen_waveform(acoustic_predicted, Y_mean, Y_std, post_filter)
+    return gen_waveform(acoustic_predicted, Y_mean, Y_std, post_filter, fs=fs)
 
 
 def load_checkpoint(model, optimizer, checkpoint_path):
@@ -228,8 +229,7 @@ if __name__ == "__main__":
     outputs_dir = args["<outputs_dir>"]
     post_filter = args["--post-filter"]
     disable_duration_gen = args["--disable-duraton-gen"]
-
-    fs = 16000
+    fs = int(args["--fs"])
 
     # Collect stats and create models
     X_min = {}
@@ -276,7 +276,7 @@ if __name__ == "__main__":
             waveform, mgc, lf0, vuv, bap = tts_from_label(
                 models, label_path, X_min, X_max, Y_mean, Y_std,
                 apply_duration_model=not disable_duration_gen,
-                post_filter=post_filter)
+                post_filter=post_filter, fs=fs)
             wavfile.write(dst_path, fs, waveform.astype(np.int16))
 
     sys.exit(0)
