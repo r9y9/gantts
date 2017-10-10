@@ -82,17 +82,17 @@ tts_duration = tf.contrib.training.HParams(
     name="duration",
 
     # Linguistic features
-    use_phone_alignment=False,
+    use_phone_alignment=True,
     subphone_features=None,
     add_frame_features=False,
     question_path=join(dirname(__file__), "nnmnkwii_gallery", "data",
-                       "questions-radio_dnn_416.hed"),
+                       "questions_jp.hed"),
 
     # Duration features
     windows=[
         (0, 0, np.array([1.0])),
     ],
-    stream_sizes=[5],
+    stream_sizes=[1],
     has_dynamic_features=[False],
 
     # Streams used for computing adversarial loss
@@ -115,7 +115,6 @@ tts_duration = tf.contrib.training.HParams(
         "lr": 0.01,
         "weight_decay": 1e-5,
     },
-
 
     # Discriminator
     discriminator="MLP",
@@ -153,14 +152,14 @@ tts_acoustic = tf.contrib.training.HParams(
     name="acoustic",
 
     # Linguistic
-    use_phone_alignment=False,
-    subphone_features="full",
+    use_phone_alignment=True,
+    subphone_features="coarse_coding",
     add_frame_features=True,
     question_path=join(dirname(__file__), "nnmnkwii_gallery", "data",
-                       "questions-radio_dnn_416.hed"),
+                       "questions_jp.hed"),
 
     # Acoustic features
-    order=24,
+    order=59,
     frame_period=5,
     windows=[
         (0, 0, np.array([1.0])),
@@ -169,7 +168,7 @@ tts_acoustic = tf.contrib.training.HParams(
     ],
     # Stream info
     # (mgc, lf0, vuv, bap)
-    stream_sizes=[75, 3, 1, 3],
+    stream_sizes=[180, 3, 1, 15],
     has_dynamic_features=[True, True, False, True],
 
     # Streams used for computing adversarial loss
@@ -202,7 +201,7 @@ tts_acoustic = tf.contrib.training.HParams(
     # Discriminator
     discriminator="MLP",
     discriminator_params={
-        "in_dim": 24,
+        "in_dim": 59,
         "out_dim": 1,
         "num_hidden": 2,
         "hidden_dim": 256,
@@ -223,7 +222,7 @@ tts_acoustic = tf.contrib.training.HParams(
     lr_decay_epoch=25,
 
     # Datasets and data loader
-    batch_size=26,
+    batch_size=16,
     num_workers=1,
     pin_memory=True,
     cache_size=1200,
