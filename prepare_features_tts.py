@@ -122,7 +122,7 @@ class AcousticSource(FileDataSource):
         nonzero_indices = np.nonzero(f0)
         lf0[nonzero_indices] = np.log(f0[nonzero_indices])
         vuv = (lf0 != 0).astype(np.float32)
-        lf0 = P.interp1d(lf0, kind="slinear")
+        lf0 = P.interp1d(lf0, kind=hp_acoustic.f0_interpolation_kind)
 
         # 50hz parameter trajectory smoothing
         hop_length = int(fs * (hp_acoustic.frame_period * 0.001))

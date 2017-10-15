@@ -167,6 +167,8 @@ tts_acoustic = tf.contrib.training.HParams(
         (1, 1, np.array([-0.5, 0.0, 0.5])),
         (1, 1, np.array([1.0, -2.0, 1.0])),
     ],
+    f0_interpolation_kind="slinear",
+
     # Stream info
     # (mgc, lf0, vuv, bap)
     stream_sizes=[75, 3, 1, 3],
