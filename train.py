@@ -395,7 +395,8 @@ def compute_distortions(y_static, y_hat_static, Y_data_mean, Y_data_std, lengths
         y_static_invscale = P.inv_scale(y_static, Y_data_mean[:static_dim], Y_data_std[:static_dim])
         y_hat_static_invscale = P.inv_scale(
             y_hat_static, Y_data_mean[:static_dim], Y_data_std[:static_dim])
-        distortions = {"mcd": metrics.melcd(mgc, mgc_hat, lengths=lengths)}
+        distortions = {"mcd": metrics.melcd(
+            y_static_invscale, y_hat_static_invscale, lengths=lengths)}
     else:
         assert False
 
@@ -416,8 +417,12 @@ def train_loop(models, optimizers, dataset_loaders,
     model_g.train()
     model_d.train()
 
-    Y_data_mean = dataset_loaders["train"].dataset.Y_data_mean
-    Y_data_std = dataset_loaders["train"].dataset.Y_data_std
+    if hp == hparams.vc:
+        Y_data_mean = dataset_loaders["train"].dataset.data_mean
+        Y_data_std = dataset_loaders["train"].dataset.data_std
+    else:
+        Y_data_mean = dataset_loaders["train"].dataset.Y_data_mean
+        Y_data_std = dataset_loaders["train"].dataset.Y_data_std
     Y_data_mean = torch.from_numpy(Y_data_mean)
     Y_data_std = torch.from_numpy(Y_data_std)
     if use_cuda:
