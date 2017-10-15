@@ -316,7 +316,7 @@ def exp_lr_scheduler(optimizer, epoch, nepoch, init_lr=0.0001, lr_decay_epoch=10
     return optimizer
 
 
-def apply_generator(x, R, lengths):
+def apply_generator(model_g, x, R, lengths):
     if hp.stream_sizes is not None:
         # Case: generic models (can be sequence model)
         assert hp.has_dynamic_features is not None
@@ -493,7 +493,7 @@ def train_loop(models, optimizers, dataset_loaders,
                 optimizer_d.zero_grad()
 
                 # Apply model (generator)
-                y_hat, y_hat_static = apply_generator(x, R, sorted_lengths)
+                y_hat, y_hat_static = apply_generator(model_g, x, R, sorted_lengths)
 
                 # Compute spoofing rate
                 if reference_discriminator is not None:
