@@ -536,7 +536,8 @@ def train_loop(models, optimizers, dataset_loaders,
                         if step <= 0:
                             break
                         # Update outputs
-                        y_hat, y_hat_static = apply_generator(x, R, sorted_lengths)
+                        y_hat, y_hat_static = apply_generator(
+                            model_g, x, R, sorted_lengths)
 
                     running_loss["mse"] += loss_mse
                     running_loss["mge"] += loss_mge
