@@ -22,6 +22,7 @@ def test_model():
 
     model = In2OutHighwayNet()
     print(model)
+    assert model.include_parameter_generation()
 
     in_dim = 118
     static_dim = in_dim // 2

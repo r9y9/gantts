@@ -24,11 +24,12 @@ vc = tf.contrib.training.HParams(
         (1, 1, np.array([-0.5, 0.0, 0.5])),
         (1, 1, np.array([1.0, -2.0, 1.0])),
     ],
-    static_dim=59,
-    stream_sizes=None,
-    has_dynamic_features=None,
+    stream_sizes=[59 * 3],
+    has_dynamic_features=[True],
 
-    adversarial_streams=None,
+    adversarial_streams=[True],
+    # In vc, 0-th coefficients are masked in feature extraction stage.
+    mask_0th_mgc_for_adv_loss=False,
 
     # Generator
     generator="In2OutHighwayNet",

@@ -317,16 +317,16 @@ def exp_lr_scheduler(optimizer, epoch, nepoch, init_lr=0.0001, lr_decay_epoch=10
 
 
 def apply_generator(model_g, x, R, lengths):
-    if hp.stream_sizes is not None:
+    if model_g.include_parameter_generation():
+        # Case: models include parameter generation in itself
+        # Mulistream features cannot be used in this case
+        y_hat, y_hat_static = model_g(x, R, lengths=lengths)
+    else:
         # Case: generic models (can be sequence model)
         assert hp.has_dynamic_features is not None
         y_hat = model_g(x, lengths=lengths)
         y_hat_static = multi_stream_mlpg(
             y_hat, R, hp.stream_sizes, hp.has_dynamic_features)
-    else:
-        # Case: models include parameter generation in itself
-        # Mulistream features cannot be used in this case
-        y_hat, y_hat_static = model_g(x, R, lengths=lengths)
 
     return y_hat, y_hat_static
 
@@ -525,7 +525,7 @@ def train_loop(models, optimizers, dataset_loaders,
                     adv_w = w_d * float(np.clip(E_loss_mge / E_loss_adv, 0, 1e+3))
                     # update generator $step times for adversarial training
                     # TODO: configuarable
-                    step = 2 if update_d and phase == "train" else 1
+                    step = 1 if update_d and phase == "train" else 1
                     while True:
                         loss_mse, loss_mge, loss_adv, loss_g = update_generator(
                             model_g, model_d, optimizer_g, y, y_hat,
