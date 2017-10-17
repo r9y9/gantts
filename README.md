@@ -69,10 +69,17 @@ Feature extraction scripts are written for CMU ARCTIC dataset, but can be easily
 Once you have downloaded datasets, then:
 
 ```
-./vc_demo.sh ${your_cmu_arctic_data_root} # in my case, data root is `~/data/cmu_arctic`
+./vc_demo.sh ${experimental_id} ${your_cmu_arctic_data_root}
 ```
 
-This will take 1 hour or two. You will find baseline/GAN-based generated audio samples in `generated` directory.
+e.g.,
+
+```
+ ./vc_demo.sh vc_gan_test ~/data/cmu_arctic/
+```
+
+Model checkpoints will be saved at `./checkpoints/${experimental_id}` and audio samples
+are saved at `./generated/${experimental_id}`.
 
 ### Text-to-speech synthesis (en)
 
@@ -89,8 +96,12 @@ This will download `slt_arctic_full_data` used in Merlin's demo, perform feature
 ```
 
 
-Model chechpoints will be saved at `./checkpoints/${experimental_id}` and audio samples
+Model checkpoints will be saved at `./checkpoints/${experimental_id}` and audio samples
 are saved at `./generated/${experimental_id}`.
+
+## Hyper paramters
+
+See ``hparams.py``.
 
 ## Monitoring training progress
 

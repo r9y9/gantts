@@ -32,12 +32,14 @@ vc = tf.contrib.training.HParams(
     mask_0th_mgc_for_adv_loss=False,
 
     # Generator
+    # For RNN VC, use In2OutRNNHighwayNet
     generator="In2OutHighwayNet",
     generator_params={
         "in_dim": None,
         "out_dim": None,
         "num_hidden": 3,
         "hidden_dim": 512,
+        # "bidirectional": True,
         "static_dim": 59,
         "dropout": 0.5,
     },
@@ -71,7 +73,7 @@ vc = tf.contrib.training.HParams(
     lr_decay_epoch=10,
 
     # Datasets and data loader
-    batch_size=32,
+    batch_size=20,
     num_workers=1,
     pin_memory=True,
     cache_size=1200,
