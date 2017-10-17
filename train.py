@@ -384,12 +384,17 @@ def compute_distortions(y_static, y_hat_static, Y_data_mean, Y_data_std, lengths
         mgc, lf0, vuv, bap = split_streams(y_static, Y_data_mean, Y_data_std)
         mgc_hat, lf0_hat, vuv_hat, bap_hat = split_streams(
             y_hat_static, Y_data_mean, Y_data_std)
+        try:
+            f0_mse = metrics.lf0_mean_squared_error(
+                lf0, vuv, lf0_hat, vuv_hat,
+                lengths=lengths, linear_domain=True)
+        except ZeroDivisionError:
+            f0_mse = np.nan
+
         distortions = {
             "mcd": metrics.melcd(mgc[:, :, 1:], mgc_hat[:, :, 1:], lengths=lengths),
             "bap_mcd": metrics.melcd(bap, bap_hat, lengths=lengths) / 10.0,
-            "f0_mse": metrics.lf0_mean_squared_error(
-                lf0, vuv, lf0_hat, vuv_hat,
-                lengths=lengths, linear_domain=True),
+            "f0_mse": f0_mse,
             "vuv_err": metrics.vuv_error(vuv, vuv_hat, lengths=lengths),
         }
     elif hp.name == "duration":
@@ -472,6 +477,12 @@ def train_loop(models, optimizers, dataset_loaders,
                 # Get sorted batch
                 x, y = x[indices], y[indices]
 
+                # Generator noise
+                if hp.generator_add_noise:
+                    z = torch.rand(x.size(0), max_len, hp.generator_noise_dim)
+                else:
+                    z = None
+
                 # MLPG paramgen matrix
                 # TODO: create this only if it's needed
                 R = unit_variance_mlpg_matrix(hp.windows, max_len)
@@ -480,9 +491,11 @@ def train_loop(models, optimizers, dataset_loaders,
                 if use_cuda:
                     x, y, R = x.cuda(), y.cuda(), R.cuda()
                     sorted_lengths = sorted_lengths.cuda()
+                    z = z.cuda() if z is not None else None
 
                 # Pack into variables
                 x, y = Variable(x), Variable(y)
+                z = Variable(z) if z is not None else None
                 sorted_lengths = Variable(sorted_lengths)
 
                 # Static features
@@ -500,7 +513,9 @@ def train_loop(models, optimizers, dataset_loaders,
                 optimizer_d.zero_grad()
 
                 # Apply model (generator)
-                y_hat, y_hat_static = apply_generator(model_g, x, R, sorted_lengths)
+                generator_input = torch.cat((x, z), -1) if z is not None else x
+                y_hat, y_hat_static = apply_generator(
+                    model_g, generator_input, R, sorted_lengths)
 
                 # Compute spoofing rate
                 if reference_discriminator is not None:
@@ -530,21 +545,11 @@ def train_loop(models, optimizers, dataset_loaders,
                 ### Update generator ###
                 if update_g:
                     adv_w = w_d * float(np.clip(E_loss_mge / E_loss_adv, 0, 1e+3))
-                    # update generator $step times for adversarial training
-                    # TODO: configuarable
-                    step = 1 if update_d and phase == "train" else 1
-                    while True:
-                        loss_mse, loss_mge, loss_adv, loss_g = update_generator(
-                            model_g, model_d, optimizer_g, x, y, y_hat,
-                            y_static, y_hat_static,
-                            adv_w, sorted_lengths, mask, phase,
-                            mse_w=mse_w, mge_w=mge_w)
-                        step -= 1
-                        if step <= 0:
-                            break
-                        # Update outputs
-                        y_hat, y_hat_static = apply_generator(
-                            model_g, x, R, sorted_lengths)
+                    loss_mse, loss_mge, loss_adv, loss_g = update_generator(
+                        model_g, model_d, optimizer_g, x, y, y_hat,
+                        y_static, y_hat_static,
+                        adv_w, sorted_lengths, mask, phase,
+                        mse_w=mse_w, mge_w=mge_w)
 
                     running_loss["mse"] += loss_mse
                     running_loss["mge"] += loss_mge
@@ -717,7 +722,10 @@ if __name__ == "__main__":
         np.save(join(data_dir, "Y_{}_data_var".format(ty)), Y_data_var)
 
         if hp.generator_params["in_dim"] is None:
-            hp.generator_params["in_dim"] = X_data_min.shape[-1]
+            D = X_data_min.shape[-1]
+            if hp.generator_add_noise:
+                D = D + hp.generator_noise_dim
+            hp.generator_params["in_dim"] = D
         if hp.generator_params["out_dim"] is None:
             hp.generator_params["out_dim"] = Y_data_mean.shape[-1]
         if hp.discriminator_params["in_dim"] is None:
@@ -725,7 +733,7 @@ if __name__ == "__main__":
                 hp.stream_sizes, hp.has_dynamic_features, len(hp.windows))
             D = int(np.sum(sizes))
             if hp.discriminator_linguistic_condition:
-                D = D + hp.generator_params["in_dim"]
+                D = D + X_data_min.shape[-1]
             hp.discriminator_params["in_dim"] = D
         dataset_loaders = get_tts_data_loaders(
             X, Y, X_data_min, X_data_max, Y_data_mean, Y_data_std)

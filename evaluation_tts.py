@@ -106,6 +106,16 @@ def gen_waveform(y_predicted, Y_mean, Y_std, post_filter=False, fs=16000):
     return generated_waveform, mgc, lf0, vuv, bap
 
 
+def _generator_input(hp, x, seed=None):
+    if seed is not None:
+        torch.manual_seed(seed)
+    if hp.generator_add_noise:
+        z = torch.rand(x.size(0), x.size(1), hp.generator_noise_dim)
+        z = Variable(z)
+        return torch.cat((x, z), -1)
+    return x
+
+
 def gen_duration(label_path, duration_model, X_min, X_max, Y_mean, Y_std):
     # Linguistic features for duration
     hts_labels = hts.load(label_path)
@@ -127,13 +137,11 @@ def gen_duration(label_path, duration_model, X_min, X_max, Y_mean, Y_std):
 
     #  Apply model
     x = Variable(torch.from_numpy(duration_linguistic_features)).float()
-    try:
-        duration_predicted = duration_model(x).data.numpy()
-    except:
-        xl = len(x)
-        x = x.view(1, -1, x.size(-1))
-        duration_predicted = duration_model(x, [xl]).data.numpy()
-        duration_predicted = duration_predicted.reshape(-1, duration_predicted.shape[-1])
+    xl = len(x)
+    x = x.view(1, -1, x.size(-1))
+    x = _generator_input(hp_duration, x)
+    duration_predicted = duration_model(x, [xl]).data.numpy()
+    duration_predicted = duration_predicted.reshape(-1, duration_predicted.shape[-1])
 
     # Apply denormalization
     duration_predicted = duration_predicted * Y_std[ty] + Y_mean[ty]
@@ -178,13 +186,11 @@ def tts_from_label(models, label_path, X_min, X_max, Y_mean, Y_std,
     acoustic_model = acoustic_model.cpu()
     acoustic_model.eval()
     x = Variable(torch.from_numpy(linguistic_features)).float()
-    try:
-        acoustic_predicted = acoustic_model(x).data.numpy()
-    except:
-        xl = len(x)
-        x = x.view(1, -1, x.size(-1))
-        acoustic_predicted = acoustic_model(x, [xl]).data.numpy()
-        acoustic_predicted = acoustic_predicted.reshape(-1, acoustic_predicted.shape[-1])
+    xl = len(x)
+    x = x.view(1, -1, x.size(-1))
+    x = _generator_input(hp_duration, x)
+    acoustic_predicted = acoustic_model(x, [xl]).data.numpy()
+    acoustic_predicted = acoustic_predicted.reshape(-1, acoustic_predicted.shape[-1])
 
     return gen_waveform(acoustic_predicted, Y_mean, Y_std, post_filter, fs=fs)
 
@@ -248,7 +254,10 @@ if __name__ == "__main__":
 
         hp = hp_acoustic if typ == "acoustic" else hp_duration
         if hp.generator_params["in_dim"] is None:
-            hp.generator_params["in_dim"] = X_min[typ].shape[-1]
+            D = X_min[typ].shape[-1]
+            if hp.generator_add_noise:
+                D = D + hp.generator_noise_dim
+            hp.generator_params["in_dim"] = D
         if hp.generator_params["out_dim"] is None:
             hp.generator_params["out_dim"] = Y_mean[typ].shape[-1]
 

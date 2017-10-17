@@ -33,6 +33,8 @@ vc = tf.contrib.training.HParams(
 
     # Generator
     # For RNN VC, use In2OutRNNHighwayNet
+    generator_add_noise=False,
+    generator_noise_dim=200,
     generator="In2OutHighwayNet",
     generator_params={
         "in_dim": None,
@@ -50,6 +52,7 @@ vc = tf.contrib.training.HParams(
     },
 
     # Discriminator
+    discriminator_linguistic_condition=False,
     discriminator="MLP",
     discriminator_params={
         "in_dim": 59,
@@ -104,6 +107,8 @@ tts_duration = tf.contrib.training.HParams(
 
     # Generator
     generator="LSTMRNN",
+    generator_add_noise=False,
+    generator_noise_dim=200,
     generator_params={
         "in_dim": None,
         "out_dim": None,
@@ -121,6 +126,7 @@ tts_duration = tf.contrib.training.HParams(
 
 
     # Discriminator
+    discriminator_linguistic_condition=False,
     discriminator="MLP",
     discriminator_params={
         "in_dim": None,
@@ -188,6 +194,8 @@ tts_acoustic = tf.contrib.training.HParams(
     mask_0th_mgc_for_adv_loss=True,
 
     # Generator
+    generator_add_noise=False,
+    generator_noise_dim=200,
     generator="MLP",
     generator_params={
         "in_dim": None,
@@ -205,6 +213,7 @@ tts_acoustic = tf.contrib.training.HParams(
     },
 
     # Discriminator
+    discriminator_linguistic_condition=False,
     discriminator="MLP",
     discriminator_params={
         "in_dim": 24,
