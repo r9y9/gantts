@@ -232,7 +232,7 @@ def get_selected_static_stream(y_hat_static):
     return y_hat_selected
 
 
-def update_discriminator(model_d, optimizer_d, y_static, y_hat_static, lengths,
+def update_discriminator(model_d, optimizer_d, x, y_static, y_hat_static, lengths,
                          mask, phase, eps=1e-20):
     # Select streams
     if hp.adversarial_streams is not None:
@@ -240,6 +240,10 @@ def update_discriminator(model_d, optimizer_d, y_static, y_hat_static, lengths,
         y_hat_static_adv = get_selected_static_stream(y_hat_static)
     else:
         y_static_adv, y_hat_static_adv = y_static, y_hat_static
+
+    if hp.discriminator_linguistic_condition:
+        y_static_adv = torch.cat((x, y_static_adv), -1)
+        y_hat_static_adv = torch.cat((x, y_hat_static_adv), -1)
 
     T = mask.sum().data[0]
 
@@ -266,7 +270,7 @@ def update_discriminator(model_d, optimizer_d, y_static, y_hat_static, lengths,
 
 
 def update_generator(model_g, model_d, optimizer_g,
-                     y, y_hat, y_static, y_hat_static,
+                     x, y, y_hat, y_static, y_hat_static,
                      adv_w, lengths, mask, phase,
                      mse_w=None, mge_w=None, eps=1e-20):
     T = mask.sum().data[0]
@@ -286,6 +290,9 @@ def update_generator(model_g, model_d, optimizer_g,
             y_hat_static_adv = get_selected_static_stream(y_hat_static)
         else:
             y_hat_static_adv = y_hat_static
+
+        if hp.discriminator_linguistic_condition:
+            y_hat_static_adv = torch.cat((x, y_hat_static_adv), -1)
 
         loss_adv = -(torch.log(model_d(
             y_hat_static_adv, lengths=lengths) + eps) * mask).sum() / T
@@ -512,7 +519,7 @@ def train_loop(models, optimizers, dataset_loaders,
                 if update_d:
                     loss_d, loss_fake_d, loss_real_d, _real_correct_count,\
                         _fake_correct_count = update_discriminator(
-                            model_d, optimizer_d, y_static, y_hat_static,
+                            model_d, optimizer_d, x, y_static, y_hat_static,
                             sorted_lengths, mask, phase)
                     running_loss["discriminator"] += loss_d
                     running_loss["loss_fake_d"] += loss_fake_d
@@ -528,7 +535,7 @@ def train_loop(models, optimizers, dataset_loaders,
                     step = 1 if update_d and phase == "train" else 1
                     while True:
                         loss_mse, loss_mge, loss_adv, loss_g = update_generator(
-                            model_g, model_d, optimizer_g, y, y_hat,
+                            model_g, model_d, optimizer_g, x, y, y_hat,
                             y_static, y_hat_static,
                             adv_w, sorted_lengths, mask, phase,
                             mse_w=mse_w, mge_w=mge_w)
@@ -716,7 +723,10 @@ if __name__ == "__main__":
         if hp.discriminator_params["in_dim"] is None:
             sizes = get_static_stream_sizes(
                 hp.stream_sizes, hp.has_dynamic_features, len(hp.windows))
-            hp.discriminator_params["in_dim"] = int(np.sum(sizes))
+            D = int(np.sum(sizes))
+            if hp.discriminator_linguistic_condition:
+                D = D + hp.generator_params["in_dim"]
+            hp.discriminator_params["in_dim"] = D
         dataset_loaders = get_tts_data_loaders(
             X, Y, X_data_min, X_data_max, Y_data_mean, Y_data_std)
 
