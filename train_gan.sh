@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 # I like to use docopt...
 hparams_name=$1
 inputs_dir=$2

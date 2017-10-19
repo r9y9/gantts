@@ -2,38 +2,54 @@
 
 [![Build Status](https://travis-ci.org/r9y9/gantts.svg?branch=master)](https://travis-ci.org/r9y9/gantts)
 
-PyTorch implementation of Generative adversarial Networks (GAN) based text-to-speech (TTS) and voice conversion (VC).
+PyTorch implementation of Generative adversarial Networks (GAN) based text-to-speech (TTS) and voice conversion (VC). Re
 
-[Yuki Saito, Shinnosuke Takamichi, Hiroshi Saruwatari, "Statistical Parametric Speech Synthesis Incorporating Generative Adversarial Networks", arXiv:1709.08041 [cs.SD], Sep. 2017](https://arxiv.org/abs/1709.08041)
+1. [Saito, Yuki, Shinnosuke Takamichi, and Hiroshi Saruwatari. "Statistical Parametric Speech Synthesis Incorporating Generative Adversarial Networks." IEEE/ACM Transactions on Audio, Speech, and Language Processing (2017).](http://ieeexplore.ieee.org/abstract/document/8063435/)
+2. [Shan Yang, Lei Xie, Xiao Chen, Xiaoyan Lou, Xuan Zhu, Dongyan Huang, Haizhou Li, "
+Statistical Parametric Speech Synthesis Using Generative Adversarial Networks Under A Multi-task Learning Framework", 	arXiv:1707.01670, Jul 2017.](https://arxiv.org/abs/1707.01670)
 
 ## Generated audio samples
 
 Audio samples are available in the Jupyter notebooks at the link below:
 
-- Voice conversion: [The effects of adversarial training in voice conversion | nbviewer](http://nbviewer.jupyter.org/github/r9y9/gantts/blob/master/notebooks/Test%20VC.ipynb)
-- Text-to-speech: [The effects of adversarial training in text-to-speech synthesis | nbviewer](http://nbviewer.jupyter.org/github/r9y9/gantts/blob/master/notebooks/Test%20TTS.ipynb)
+- [Voice conversion (en, MLP)](http://nbviewer.jupyter.org/github/r9y9/gantts/blob/master/notebooks/Test%20VC.ipynb)
+- [Voice conversion (en, RNN)](http://nbviewer.jupyter.org/github/r9y9/gantts/blob/master/notebooks/Test%20RNN%20VC.ipynb)
+- [Text-to-speech synthesis (en, MLP)]([The effects of adversarial training in text-to-speech synthesis | nbviewer](http://nbviewer.jupyter.org/github/r9y9/gantts/blob/master/notebooks/Test%20TTS.ipynb)
+- [Text-to-speech synthesis (ja, MLP)](http://nbviewer.jupyter.org/gist/r9y9/185a56417cee27d9f785b8caf1c9f5ec)
 
-You can find source code for the notebooks in `notebooks` directory of the repository.
+
+## Notes on hyper parameters
+
+- `adversarial_streams`, which represents streams (mgc, lf0, vuv, bap) to be used to compute adversarial loss, is a very speech quality sensitive parameter. Computing adversarial loss on mgc features (except for first few dimensions) seems to be working good.
+- If `mask_nth_mgc_for_adv_loss` > 0, first `mask_nth_mgc_for_adv_loss` dimension for mgc will be ignored for computing adversarial loss. As described in [saito2017asja](http://sython.org/papers/ASJ/saito2017asja.pdf), I confirmed that using 0-th (and 1-th) mgc for computing adversarial loss affects speech quality. From my experience, `mask_nth_mgc_for_adv_loss` = 1 for mgc order 25, `mask_nth_mgc_for_adv_loss` = 2 for mgc order 59 are working to me.
+- F0 extracted by WORLD will be spline interpolated. Set `f0_interpolation_kind` to "slinear" if you want frist-order spline interpolation, which is same as Merlin's default.
+- Set `use_harvest` to True if you want to use Harvest F0 estimation algorithm. If False, Dio and StoneMask are used to estimate/refine F0.
+
+### Notes on [2]
+
+Though I haven't got improvements over Saito's approach [1] yet, but the GAN-based models described in [2] should be achieved by the following configurations:
+
+- Set `generator_add_noise` to True. This will enable generator to use Gaussian noise as input. Linguistic features are concatenated with the noise vector.
+- Set `discriminator_linguistic_condition` to True. The discriminator uses linguistic features as condition.
 
 ## Requirements
 
 - [PyTorch](http://pytorch.org/)
 - [TensorFlow](https://www.tensorflow.org/) (just for `tf.contrib.training.HParams`)
 - [nnmnkwii](https://github.com/r9y9/nnmnkwii)
+- https://github.com/taolei87/sru (if you want to try SRU-based models)
 - Python3
 
 ## Installation
 
+Please install PyTorch, TensorFlow and SRU (if needed) first. Once you have those, then
+
 ```
 git clone --recursive https://github.com/r9y9/gantts & cd gantts
-pip install -e . # or python setup.py develop
-```
-
-If you want to run the training script, then you need to install additional dependencies.
-
-```
 pip install -e ".[train]"
 ```
+
+should install all other dependencies.
 
 ## Repository structure
 

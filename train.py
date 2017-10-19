@@ -28,6 +28,7 @@ import torch
 from torch import nn
 from torch.autograd import Variable
 from torch import optim
+from torch.nn import functional as F
 import torch.backends.cudnn as cudnn
 from torch.utils import data as data_utils
 from sklearn.model_selection import train_test_split
@@ -52,6 +53,7 @@ from nnmnkwii.datasets import MemoryCacheDataset
 import gantts
 from gantts.multistream import multi_stream_mlpg, get_static_features
 from gantts.multistream import get_static_stream_sizes, select_streams
+from gantts.multistream import recompute_delta_features
 from gantts.seqloss import MaskedMSELoss, sequence_mask
 
 import hparams
@@ -121,6 +123,13 @@ class TTSDataset(object):
             self.X[idx], min_=self.X_data_min, scale_=self.X_data_scale,
             feature_range=(0.01, 0.99))
         y = P.scale(self.Y[idx], self.Y_data_mean, self.Y_data_std)
+
+        # To handle inconsistent static-delta relationship after normalization
+        # This is required to use MSE + MGE loss work
+        if hp.recompute_delta_features:
+            y = recompute_delta_features(y, self.Y_data_mean, self.Y_data_std,
+                                         hp.windows, hp.stream_sizes,
+                                         hp.has_dynamic_features)
         return x, y
 
     def __len__(self):
@@ -135,6 +144,7 @@ def _pad_2d(x, max_len):
 
 def collate_fn(batch):
     """Create batch"""
+
     input_lengths = np.array([len(x[0]) for x in batch], dtype=np.int)
     max_len = np.max(input_lengths)
     x_batch = np.array([_pad_2d(x[0], max_len) for x in batch],
@@ -226,9 +236,9 @@ def get_selected_static_stream(y_hat_static):
                                     streams=hp.adversarial_streams)
     # 0-th mgc with adversarial trainging affects speech quality
     # ref: saito17asja_gan.pdf
-    if hp.mask_0th_mgc_for_adv_loss:
+    if hp.mask_nth_mgc_for_adv_loss > 0:
         assert hp == hparams.tts_acoustic
-        y_hat_selected = y_hat_selected[:, :, 1:]
+        y_hat_selected = y_hat_selected[:, :, hp.mask_nth_mgc_for_adv_loss:]
     return y_hat_selected
 
 
@@ -278,10 +288,10 @@ def update_generator(model_g, model_d, optimizer_g,
     criterion = MaskedMSELoss()
 
     # MSELoss in static feature domain
-    loss_mge = criterion(y_hat_static, y_static, lengths)
+    loss_mge = criterion(y_hat_static, y_static, mask=mask)
 
     # MSELoss in static + delta features domain
-    loss_mse = criterion(y_hat, y, lengths)
+    loss_mse = criterion(y_hat, y, mask=mask)
 
     # Adversarial loss
     if adv_w > 0:
@@ -332,6 +342,13 @@ def apply_generator(model_g, x, R, lengths):
         # Case: generic models (can be sequence model)
         assert hp.has_dynamic_features is not None
         y_hat = model_g(x, lengths=lengths)
+
+        # Handle dimention mismatch
+        # This happens when we use pad_packed_sequence
+        if y_hat.size(1) != x.size(1):
+            y_hat = F.pad(y_hat.unsqueeze(
+                0), (0, 0, x.size(1) - y_hat.size(-2), 0)).squeeze(0)
+
         y_hat_static = multi_stream_mlpg(
             y_hat, R, hp.stream_sizes, hp.has_dynamic_features)
 
@@ -426,8 +443,6 @@ def train_loop(models, optimizers, dataset_loaders,
         if reference_discriminator is not None:
             reference_discriminator = reference_discriminator.cuda()
             reference_discriminator.eval()
-    model_g.train()
-    model_d.train()
 
     if hp == hparams.vc:
         Y_data_mean = dataset_loaders["train"].dataset.data_mean
@@ -443,8 +458,9 @@ def train_loop(models, optimizers, dataset_loaders,
 
     E_loss_mge = 1
     E_loss_adv = 1
-    is_acoustic = hp.name == "acoustic"
+    has_dynamic = np.any(hp.has_dynamic_features)
     global global_epoch
+
     for global_epoch in tqdm(range(global_epoch + 1, hp.nepoch + 1)):
         # LR schedule
         if hp.lr_decay_schedule and update_g:
@@ -462,6 +478,12 @@ def train_loop(models, optimizers, dataset_loaders,
                             "loss_fake_d": 0.0,
                             "loss_adv": 0.0,
                             "discriminator": 0.0}
+            if phase == "train":
+                model_g.train()
+                model_d.train()
+            else:
+                model_g.eval()
+                model_d.eval()
             running_metrics = {}
             real_correct_count, fake_correct_count = 0, 0
             regard_fake_as_natural = 0
@@ -472,6 +494,7 @@ def train_loop(models, optimizers, dataset_loaders,
                 sorted_lengths, indices = torch.sort(
                     lengths.view(-1), dim=0, descending=True)
                 sorted_lengths = sorted_lengths.long()
+                cpu_sorted_lengths = list(sorted_lengths)
                 max_len = sorted_lengths[0]
 
                 # Get sorted batch
@@ -483,13 +506,16 @@ def train_loop(models, optimizers, dataset_loaders,
                 else:
                     z = None
 
-                # MLPG paramgen matrix
-                # TODO: create this only if it's needed
-                R = unit_variance_mlpg_matrix(hp.windows, max_len)
-                R = torch.from_numpy(R)
+                # Construct MLPG paramgen matrix for every batch
+                if has_dynamic:
+                    R = unit_variance_mlpg_matrix(hp.windows, max_len)
+                    R = torch.from_numpy(R)
+                    R = R.cuda() if use_cuda else R
+                else:
+                    R = None
 
                 if use_cuda:
-                    x, y, R = x.cuda(), y.cuda(), R.cuda()
+                    x, y = x.cuda(), y.cuda()
                     sorted_lengths = sorted_lengths.cuda()
                     z = z.cuda() if z is not None else None
 
@@ -515,7 +541,9 @@ def train_loop(models, optimizers, dataset_loaders,
                 # Apply model (generator)
                 generator_input = torch.cat((x, z), -1) if z is not None else x
                 y_hat, y_hat_static = apply_generator(
-                    model_g, generator_input, R, sorted_lengths)
+                    model_g, generator_input, R, cpu_sorted_lengths)
+                # Should have same time length
+                assert x.size(1) == y_hat.size(1)
 
                 # Compute spoofing rate
                 if reference_discriminator is not None:
@@ -524,7 +552,7 @@ def train_loop(models, optimizers, dataset_loaders,
                     else:
                         y_hat_static_ref = y_hat_static
                     target = reference_discriminator(
-                        y_hat_static_ref, lengths=sorted_lengths)
+                        y_hat_static_ref, lengths=cpu_sorted_lengths)
                     # Count samples classified as natural, while inputs are
                     # actually generated.
                     regard_fake_as_natural += ((target > 0.5).float() * mask).sum().data[0]
@@ -535,7 +563,7 @@ def train_loop(models, optimizers, dataset_loaders,
                     loss_d, loss_fake_d, loss_real_d, _real_correct_count,\
                         _fake_correct_count = update_discriminator(
                             model_d, optimizer_d, x, y_static, y_hat_static,
-                            sorted_lengths, mask, phase)
+                            cpu_sorted_lengths, mask, phase)
                     running_loss["discriminator"] += loss_d
                     running_loss["loss_fake_d"] += loss_fake_d
                     running_loss["loss_real_d"] += loss_real_d
@@ -548,7 +576,7 @@ def train_loop(models, optimizers, dataset_loaders,
                     loss_mse, loss_mge, loss_adv, loss_g = update_generator(
                         model_g, model_d, optimizer_g, x, y, y_hat,
                         y_static, y_hat_static,
-                        adv_w, sorted_lengths, mask, phase,
+                        adv_w, cpu_sorted_lengths, mask, phase,
                         mse_w=mse_w, mge_w=mge_w)
 
                     running_loss["mse"] += loss_mse
@@ -731,7 +759,9 @@ if __name__ == "__main__":
         if hp.discriminator_params["in_dim"] is None:
             sizes = get_static_stream_sizes(
                 hp.stream_sizes, hp.has_dynamic_features, len(hp.windows))
-            D = int(np.sum(sizes))
+            D = int(np.array(sizes[hp.adversarial_streams]).sum())
+            if hp.adversarial_streams[0]:
+                D -= hp.mask_nth_mgc_for_adv_loss
             if hp.discriminator_linguistic_condition:
                 D = D + X_data_min.shape[-1]
             hp.discriminator_params["in_dim"] = D

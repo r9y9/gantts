@@ -9,6 +9,25 @@ from torch.autograd import Variable
 import numpy as np
 
 from nnmnkwii.autograd import unit_variance_mlpg
+from nnmnkwii import preprocessing as P
+
+
+def recompute_delta_features(Y, Y_data_mean, Y_data_std,
+                             windows,
+                             stream_sizes=[180, 3, 1, 3],
+                             has_dynamic_features=[True, True, False, True]):
+    start_indices = np.hstack(([0], np.cumsum(stream_sizes)[:-1]))
+    end_indices = np.cumsum(stream_sizes)
+    static_stream_sizes = get_static_stream_sizes(
+        stream_sizes, has_dynamic_features, len(windows))
+
+    for start_idx, end_idx, static_size, has_dynamic in zip(
+            start_indices, end_indices, static_stream_sizes, has_dynamic_features):
+        if has_dynamic:
+            y_static = Y[:, start_idx:start_idx + static_size]
+            Y[:, start_idx:end_idx] = P.delta_features(y_static, windows)
+
+    return Y
 
 
 def select_streams(inputs, stream_sizes=[60, 1, 1, 1],
@@ -66,7 +85,10 @@ def multi_stream_mlpg(inputs, R,
                       streams=[True, True, True, True]):
     """Split streams and do apply MLPG if stream has dynamic features.
     """
-    num_windows = R.size(1) / R.size(0)
+    if R is None:
+        num_windows = 1
+    else:
+        num_windows = R.size(1) / R.size(0)
     B, T, D = inputs.size()
     if D != sum(stream_sizes):
         raise RuntimeError("You probably have specified wrong dimention params.")

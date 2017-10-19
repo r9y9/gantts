@@ -120,7 +120,8 @@ class In2OutRNNHighwayNet(AbstractModel, nn.Module):
 
 class MLP(AbstractModel, nn.Module):
     def __init__(self, in_dim=118, out_dim=1, num_hidden=2, hidden_dim=256,
-                 dropout=0.5, last_sigmoid=True):
+                 dropout=0.5, last_sigmoid=True, bidirectional=None):
+        # bidirectional is dummy
         super(MLP, self).__init__()
         in_sizes = [in_dim] + [hidden_dim] * (num_hidden - 1)
         out_sizes = [hidden_dim] * num_hidden
@@ -138,6 +139,30 @@ class MLP(AbstractModel, nn.Module):
             x = self.dropout(self.relu(layer(x)))
         x = self.last_linear(x)
         return self.sigmoid(x) if self.last_sigmoid else x
+
+
+# needs https://github.com/taolei87/sru
+class SRURNN(AbstractModel, nn.Module):
+    def __init__(self, in_dim=118, out_dim=118, num_hidden=2, hidden_dim=256,
+                 bidirectional=False, dropout=0, last_sigmoid=False):
+        super(SRURNN, self).__init__()
+        from cuda_functional import SRU
+        self.num_direction = 2 if bidirectional else 1
+        self.gru = SRU(in_dim, hidden_dim, num_hidden,
+                       bidirectional=bidirectional, dropout=dropout)
+        self.hidden2out = nn.Linear(hidden_dim * self.num_direction, out_dim)
+        self.sigmoid = nn.Sigmoid()
+        self.last_sigmoid = last_sigmoid
+
+    def forward(self, sequence, lengths):
+        # Batch first -> Time first
+        sequence = sequence.transpose(0, 1)
+        output, _ = self.gru(sequence)
+        # Time first -> Batch first
+        output = output.transpose(0, 1)
+        output = self.hidden2out(output)
+
+        return self.sigmoid(output) if self.last_sigmoid else output
 
 
 class LSTMRNN(AbstractModel, nn.Module):
