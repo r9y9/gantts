@@ -14,7 +14,7 @@ Audio samples are available in the Jupyter notebooks at the link below:
 
 - [Voice conversion (en, MLP)](http://nbviewer.jupyter.org/github/r9y9/gantts/blob/master/notebooks/Test%20VC.ipynb)
 - [Voice conversion (en, RNN)](http://nbviewer.jupyter.org/github/r9y9/gantts/blob/master/notebooks/Test%20RNN%20VC.ipynb)
-- [Text-to-speech synthesis (en, MLP)]([The effects of adversarial training in text-to-speech synthesis | nbviewer](http://nbviewer.jupyter.org/github/r9y9/gantts/blob/master/notebooks/Test%20TTS.ipynb)
+- [Text-to-speech synthesis (en, MLP)](http://nbviewer.jupyter.org/github/r9y9/gantts/blob/master/notebooks/Test%20TTS.ipynb)
 - [Text-to-speech synthesis (ja, MLP)](http://nbviewer.jupyter.org/gist/r9y9/185a56417cee27d9f785b8caf1c9f5ec)
 
 
