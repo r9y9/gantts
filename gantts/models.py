@@ -165,6 +165,29 @@ class SRURNN(AbstractModel, nn.Module):
         return self.sigmoid(output) if self.last_sigmoid else output
 
 
+class GRURNN(AbstractModel, nn.Module):
+    def __init__(self, in_dim=118, out_dim=118, num_hidden=2, hidden_dim=256,
+                 bidirectional=False, dropout=0, last_sigmoid=False):
+        super(GRURNN, self).__init__()
+        self.num_direction = 2 if bidirectional else 1
+        self.gru = nn.LSTM(in_dim, hidden_dim, num_hidden, batch_first=True,
+                           bidirectional=bidirectional, dropout=dropout)
+        self.hidden2out = nn.Linear(hidden_dim * self.num_direction, out_dim)
+        self.sigmoid = nn.Sigmoid()
+        self.last_sigmoid = last_sigmoid
+
+    def forward(self, sequence, lengths):
+        if isinstance(lengths, Variable):
+            lengths = lengths.data.cpu().long().numpy()
+        sequence = nn.utils.rnn.pack_padded_sequence(
+            sequence, lengths, batch_first=True)
+        output, _ = self.gru(sequence)
+        output, _ = nn.utils.rnn.pad_packed_sequence(output, batch_first=True)
+        output = self.hidden2out(output)
+
+        return self.sigmoid(output) if self.last_sigmoid else output
+
+
 class LSTMRNN(AbstractModel, nn.Module):
     def __init__(self, in_dim=118, out_dim=118, num_hidden=2, hidden_dim=256,
                  bidirectional=False, dropout=0, last_sigmoid=False):
