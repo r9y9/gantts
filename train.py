@@ -411,7 +411,7 @@ def compute_distortions(y_static, y_hat_static, Y_data_mean, Y_data_std, lengths
         distortions = {
             "mcd": metrics.melcd(mgc[:, :, 1:], mgc_hat[:, :, 1:], lengths=lengths),
             "bap_mcd": metrics.melcd(bap, bap_hat, lengths=lengths) / 10.0,
-            "f0_mse": f0_mse,
+            "f0_rmse": np.sqrt(f0_mse),
             "vuv_err": metrics.vuv_error(vuv, vuv_hat, lengths=lengths),
         }
     elif hp.name == "duration":
