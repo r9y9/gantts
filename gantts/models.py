@@ -144,12 +144,14 @@ class MLP(AbstractModel, nn.Module):
 # needs https://github.com/taolei87/sru
 class SRURNN(AbstractModel, nn.Module):
     def __init__(self, in_dim=118, out_dim=118, num_hidden=2, hidden_dim=256,
-                 bidirectional=False, dropout=0, last_sigmoid=False):
+                 bidirectional=False, dropout=0, last_sigmoid=False,
+                 use_relu=0, rnn_dropout=0.0):
         super(SRURNN, self).__init__()
         from cuda_functional import SRU
         self.num_direction = 2 if bidirectional else 1
         self.gru = SRU(in_dim, hidden_dim, num_hidden,
-                       bidirectional=bidirectional, dropout=dropout)
+                       bidirectional=bidirectional, dropout=dropout,
+                       use_relu=use_relu, rnn_dropout=rnn_dropout)
         self.hidden2out = nn.Linear(hidden_dim * self.num_direction, out_dim)
         self.sigmoid = nn.Sigmoid()
         self.last_sigmoid = last_sigmoid
