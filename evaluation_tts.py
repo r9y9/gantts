@@ -149,7 +149,7 @@ def gen_duration(label_path, duration_model, X_min, X_max, Y_mean, Y_std):
     duration_predicted = duration_predicted.reshape(-1, duration_predicted.shape[-1])
 
     # Apply denormalization
-    duration_predicted = duration_predicted * Y_std[ty] + Y_mean[ty]
+    duration_predicted = P.inv_scale(duration_predicted, Y_mean[ty], Y_std[ty])
     duration_predicted = np.round(duration_predicted)
 
     # Set minimum state duration to 1
