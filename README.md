@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.org/r9y9/gantts.svg?branch=master)](https://travis-ci.org/r9y9/gantts)
 
-PyTorch implementation of Generative adversarial Networks (GAN) based text-to-speech (TTS) and voice conversion (VC). Re
+PyTorch implementation of Generative adversarial Networks (GAN) based text-to-speech (TTS) and voice conversion (VC).
 
 1. [Saito, Yuki, Shinnosuke Takamichi, and Hiroshi Saruwatari. "Statistical Parametric Speech Synthesis Incorporating Generative Adversarial Networks." IEEE/ACM Transactions on Audio, Speech, and Language Processing (2017).](http://ieeexplore.ieee.org/abstract/document/8063435/)
 2. [Shan Yang, Lei Xie, Xiao Chen, Xiaoyan Lou, Xuan Zhu, Dongyan Huang, Haizhou Li, "
