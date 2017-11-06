@@ -48,7 +48,7 @@ use_cuda = torch.cuda.is_available()
 binary_dict, continuous_dict = hts.load_question_set(hp_acoustic.question_path)
 
 
-def gen_parameters(y_predicted, Y_mean, Y_std):
+def gen_parameters(y_predicted, Y_mean, Y_std, mge_training=True):
     mgc_dim, lf0_dim, vuv_dim, bap_dim = hp_acoustic.stream_sizes
 
     mgc_start_idx = 0
@@ -58,37 +58,56 @@ def gen_parameters(y_predicted, Y_mean, Y_std):
 
     windows = hp_acoustic.windows
 
-    # Split acoustic features
-    mgc = y_predicted[:, :lf0_start_idx]
-    lf0 = y_predicted[:, lf0_start_idx:vuv_start_idx]
-    vuv = y_predicted[:, vuv_start_idx]
-    bap = y_predicted[:, bap_start_idx:]
-
-    # Perform MLPG on normalized features
-    mgc = paramgen.mlpg(mgc, np.ones(mgc.shape[-1]), windows)
-    lf0 = paramgen.mlpg(lf0, np.ones(lf0.shape[-1]), windows)
-    bap = paramgen.mlpg(bap, np.ones(bap.shape[-1]), windows)
-
     ty = "acoustic"
-    # When we use MGE training, denormalization should be done after MLPG.
-    mgc = P.inv_scale(mgc, Y_mean[ty][:mgc_dim // len(windows)],
-                      Y_std[ty][:mgc_dim // len(windows)])
-    lf0 = P.inv_scale(lf0, Y_mean[ty][lf0_start_idx:lf0_start_idx + lf0_dim // len(windows)],
-                      Y_std[ty][lf0_start_idx:lf0_start_idx + lf0_dim // len(windows)])
-    bap = P.inv_scale(bap, Y_mean[ty][bap_start_idx:bap_start_idx + bap_dim // len(windows)],
-                      Y_std[ty][bap_start_idx:bap_start_idx + bap_dim // len(windows)])
-    vuv = P.inv_scale(vuv, Y_mean[ty][vuv_start_idx], Y_std[ty][vuv_start_idx])
+
+    # MGE training
+    if mge_training:
+        # Split acoustic features
+        mgc = y_predicted[:, :lf0_start_idx]
+        lf0 = y_predicted[:, lf0_start_idx:vuv_start_idx]
+        vuv = y_predicted[:, vuv_start_idx]
+        bap = y_predicted[:, bap_start_idx:]
+
+        # Perform MLPG on normalized features
+        mgc = paramgen.mlpg(mgc, np.ones(mgc.shape[-1]), windows)
+        lf0 = paramgen.mlpg(lf0, np.ones(lf0.shape[-1]), windows)
+        bap = paramgen.mlpg(bap, np.ones(bap.shape[-1]), windows)
+
+        # When we use MGE training, denormalization should be done after MLPG.
+        mgc = P.inv_scale(mgc, Y_mean[ty][:mgc_dim // len(windows)],
+                          Y_std[ty][:mgc_dim // len(windows)])
+        lf0 = P.inv_scale(lf0, Y_mean[ty][lf0_start_idx:lf0_start_idx + lf0_dim // len(windows)],
+                          Y_std[ty][lf0_start_idx:lf0_start_idx + lf0_dim // len(windows)])
+        bap = P.inv_scale(bap, Y_mean[ty][bap_start_idx:bap_start_idx + bap_dim // len(windows)],
+                          Y_std[ty][bap_start_idx:bap_start_idx + bap_dim // len(windows)])
+        vuv = P.inv_scale(vuv, Y_mean[ty][vuv_start_idx], Y_std[ty][vuv_start_idx])
+    else:
+        # Denormalization first
+        y_predicted = P.inv_scale(y_predicted, Y_mean, Y_std)
+
+        # Split acoustic features
+        mgc = y_predicted[:, :lf0_start_idx]
+        lf0 = y_predicted[:, lf0_start_idx:vuv_start_idx]
+        vuv = y_predicted[:, vuv_start_idx]
+        bap = y_predicted[:, bap_start_idx:]
+
+        # Perform MLPG
+        Y_var = Y_std[ty] * Y_std[ty]
+        mgc = paramgen.mlpg(mgc, Y_var[:lf0_start_idx], windows)
+        lf0 = paramgen.mlpg(lf0, Y_var[lf0_start_idx:vuv_start_idx], windows)
+        bap = paramgen.mlpg(bap, Y_var[bap_start_idx:], windows)
 
     return mgc, lf0, vuv, bap
 
 
-def gen_waveform(y_predicted, Y_mean, Y_std, post_filter=False, coef=1.4, fs=16000):
+def gen_waveform(y_predicted, Y_mean, Y_std, post_filter=False, coef=1.4,
+                 fs=16000, mge_training=True):
     alpha = pysptk.util.mcepalpha(fs)
     fftlen = fftlen = pyworld.get_cheaptrick_fft_size(fs)
     frame_period = hp_acoustic.frame_period
 
     # Generate parameters and split streams
-    mgc, lf0, vuv, bap = gen_parameters(y_predicted, Y_mean, Y_std)
+    mgc, lf0, vuv, bap = gen_parameters(y_predicted, Y_mean, Y_std, mge_training)
 
     if post_filter:
         mgc = merlin_post_filter(mgc, alpha, coef=coef)
@@ -162,7 +181,8 @@ def gen_duration(label_path, duration_model, X_min, X_max, Y_mean, Y_std):
 
 def tts_from_label(models, label_path, X_min, X_max, Y_mean, Y_std,
                    post_filter=False,
-                   apply_duration_model=True, coef=1.4, fs=16000):
+                   apply_duration_model=True, coef=1.4, fs=16000,
+                   mge_training=True):
     duration_model, acoustic_model = models["duration"], models["acoustic"]
 
     if use_cuda:
@@ -201,7 +221,8 @@ def tts_from_label(models, label_path, X_min, X_max, Y_mean, Y_std,
     acoustic_predicted = acoustic_model(x, [xl]).data.cpu().numpy()
     acoustic_predicted = acoustic_predicted.reshape(-1, acoustic_predicted.shape[-1])
 
-    return gen_waveform(acoustic_predicted, Y_mean, Y_std, post_filter, coef=coef, fs=fs)
+    return gen_waveform(acoustic_predicted, Y_mean, Y_std, post_filter,
+                        coef=coef, fs=fs, mge_training=mge_training)
 
 
 def load_checkpoint(model, optimizer, checkpoint_path):
