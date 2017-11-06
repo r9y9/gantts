@@ -23,7 +23,7 @@ import pysptk
 
 import sys
 import os
-from os.path import splitext, join, abspath, basename
+from os.path import splitext, join, abspath, basename, exists
 
 from nnmnkwii import preprocessing as P
 from nnmnkwii import paramgen
@@ -302,9 +302,10 @@ if __name__ == "__main__":
     # 2. Test set
     eval_dir = join(outputs_dir, "eval")
     test_dir = join(outputs_dir, "test")
-    os.makedirs(eval_dir, exist_ok=True)
-    os.makedirs(test_dir, exist_ok=True)
-
+    if not exists(eval_dir):
+        os.makedirs(eval_dir)
+    if not exists(test_dir):
+        os.makedirs(test_dir)
     eval_lab_files = get_lab_files(data_dir, labels_dir, test=False)
     test_lab_files = get_lab_files(data_dir, labels_dir, test=True)
     for dst_dir, files in [(eval_dir, eval_lab_files), (test_dir, test_lab_files)]:

@@ -38,7 +38,7 @@ Though I haven't got improvements over Saito's approach [1] yet, but the GAN-bas
 - [TensorFlow](https://www.tensorflow.org/) (just for `tf.contrib.training.HParams`)
 - [nnmnkwii](https://github.com/r9y9/nnmnkwii)
 - https://github.com/taolei87/sru (if you want to try SRU-based models)
-- Python3
+- Python
 
 ## Installation
 

@@ -37,7 +37,7 @@ import sys
 import time
 import os
 import math
-from os.path import splitext, join, abspath
+from os.path import splitext, join, abspath, exists
 from tqdm import tqdm
 from warnings import warn
 
@@ -695,7 +695,8 @@ if __name__ == "__main__":
     update_d = w_d > 0
     update_g = False if discriminator_warmup else True
 
-    os.makedirs(checkpoint_dir, exist_ok=True)
+    if not exists(checkpoint_dir):
+        os.makedirs(checkpoint_dir)
 
     X = {"train": {}, "test": {}}
     Y = {"train": {}, "test": {}}

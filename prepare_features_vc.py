@@ -90,7 +90,8 @@ if __name__ == "__main__":
     for speaker, name in [(source_speaker, "X"), (target_speaker, "Y")]:
         d = join(dst_dir, name)
         print("Destination dir for {}: {}".format(speaker, d))
-        os.makedirs(d, exist_ok=True)
+        if not exists(d):
+            os.makedirs(d)
 
     # Convert to arrays
     print("Convert datasets to arrays")
