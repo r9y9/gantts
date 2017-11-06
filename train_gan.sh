@@ -12,6 +12,7 @@ discriminator_warmup_epoch=$6
 spoofing_total_epoch=$7
 total_epoch=$8
 experiment_id=$9
+w_d=1
 
 randstr=$(python -c "from datetime import datetime; print(str(datetime.now()).replace(' ', '_'))")
 randstr=${experiment_id}_${randstr}
@@ -68,7 +69,7 @@ fi
 # only train discriminator
 if [ "${run_discriminator_warmup}" == 1 ]; then
     python train.py --hparams_name="$hparams_name" \
-        --max_files=$max_files --w_d=1 \
+        --max_files=$max_files --w_d=${w_d} \
         --checkpoint-g=$dst_root/gan_g_warmup/checkpoint_epoch${generator_warmup_epoch}_Generator.pth\
         --discriminator-warmup --hparams="nepoch=$discriminator_warmup_epoch" \
         --checkpoint-dir=$dst_root/gan_d_warmup $inputs_dir $outputs_dir \
@@ -82,7 +83,7 @@ fi
 # only train discriminator
 if [ "${run_spoofing_warmup}" == 1 ]; then
     python train.py --hparams_name="$hparams_name" \
-        --max_files=$max_files --w_d=1 --hparams="nepoch=$spoofing_total_epoch" \
+        --max_files=$max_files --w_d=${w_d} --hparams="nepoch=$spoofing_total_epoch" \
         --checkpoint-g=${baseline_checkpoint} \
         --discriminator-warmup \
         --checkpoint-dir=$dst_root/spoofing \
@@ -99,7 +100,7 @@ if [ "${run_adversarial}" == 1 ]; then
         --checkpoint-d=$dst_root/gan_d_warmup/checkpoint_epoch${discriminator_warmup_epoch}_Discriminator.pth \
         --checkpoint-g=$dst_root/gan_g_warmup/checkpoint_epoch${generator_warmup_epoch}_Generator.pth \
         --checkpoint-r=${spoofing_checkpoint} \
-        --w_d=1 --hparams="nepoch=$total_epoch" \
+        --w_d=${w_d} --hparams="nepoch=$total_epoch" \
         --checkpoint-dir=$dst_root/gan \
         --reset_optimizers --restart_epoch=${generator_warmup_epoch} \
         $inputs_dir $outputs_dir \
