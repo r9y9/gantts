@@ -24,6 +24,7 @@ Audio samples are available in the Jupyter notebooks at the link below:
 - If `mask_nth_mgc_for_adv_loss` > 0, first `mask_nth_mgc_for_adv_loss` dimension for mgc will be ignored for computing adversarial loss. As described in [saito2017asja](http://sython.org/papers/ASJ/saito2017asja.pdf), I confirmed that using 0-th (and 1-th) mgc for computing adversarial loss affects speech quality. From my experience, `mask_nth_mgc_for_adv_loss` = 1 for mgc order 25, `mask_nth_mgc_for_adv_loss` = 2 for mgc order 59 are working to me.
 - F0 extracted by WORLD will be spline interpolated. Set `f0_interpolation_kind` to "slinear" if you want frist-order spline interpolation, which is same as Merlin's default.
 - Set `use_harvest` to True if you want to use Harvest F0 estimation algorithm. If False, Dio and StoneMask are used to estimate/refine F0.
+- If you see `cuda runtime error (2) : out of memory`, try smaller batch size. https://github.com/r9y9/gantts/issues/3
 
 ### Notes on [2]
 
