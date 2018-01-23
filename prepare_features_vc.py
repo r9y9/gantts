@@ -112,7 +112,7 @@ if __name__ == "__main__":
         # Trim and ajast frames
         x = P.trim_zeros_frames(x)
         y = P.trim_zeros_frames(y)
-        x, y = P.adjast_frame_lengths(x, y, pad=True, divisible_by=2)
+        x, y = P.adjust_frame_lengths(x, y, pad=True, divisible_by=2)
 
         # Save
         np.save(src_path, x)
