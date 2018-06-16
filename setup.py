@@ -59,10 +59,10 @@ setup(name='gantts',
               "docopt",
               "tqdm",
               "tensorboard_logger",
-              "nnmnkwii >= 0.0.7",
+              "nnmnkwii >= 0.0.14",
           ],
           "test": [
-              "nnmnkwii >= 0.0.7",
+              "nnmnkwii >= 0.0.14",
               "nose",
           ],
       })
