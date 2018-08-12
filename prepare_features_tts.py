@@ -108,8 +108,15 @@ class AcousticSource(FileDataSource):
     def collect_features(self, wav_path, label_path):
         fs, x = wavfile.read(wav_path)
         x = x.astype(np.float64)
-        f0, timeaxis = pyworld.dio(x, fs, frame_period=hp_acoustic.frame_period)
-        f0 = pyworld.stonemask(x, f0, timeaxis, fs)
+        if hp_acoustic.use_harvest:
+            f0, timeaxis = pyworld.harvest(
+                x, fs, frame_period=hp_acoustic.frame_period,
+                f0_floor=hp_acoustic.f0_floor, f0_ceil=hp_acoustic.f0_ceil)
+        else:
+            f0, timeaxis = pyworld.dio(
+                x, fs, frame_period=hp_acoustic.frame_period,
+                f0_floor=hp_acoustic.f0_floor, f0_ceil=hp_acoustic.f0_ceil)
+            f0 = pyworld.stonemask(x, f0, timeaxis, fs)
         spectrogram = pyworld.cheaptrick(x, f0, timeaxis, fs)
         aperiodicity = pyworld.d4c(x, f0, timeaxis, fs)
 
@@ -121,13 +128,19 @@ class AcousticSource(FileDataSource):
         lf0 = f0.copy()
         nonzero_indices = np.nonzero(f0)
         lf0[nonzero_indices] = np.log(f0[nonzero_indices])
-        vuv = (lf0 != 0).astype(np.float32)
-        lf0 = P.interp1d(lf0, kind="slinear")
+        if hp_acoustic.use_harvest:
+            # https://github.com/mmorise/World/issues/35#issuecomment-306521887
+            vuv = (aperiodicity[:, 0] < 0.5).astype(np.float32)[:, None]
+        else:
+            vuv = (lf0 != 0).astype(np.float32)
+        lf0 = P.interp1d(lf0, kind=hp_acoustic.f0_interpolation_kind)
 
-        # 50hz parameter trajectory smoothing
-        hop_length = int(fs * (hp_acoustic.frame_period * 0.001))
-        modfs = fs / hop_length
-        mgc = P.modspec_smoothing(mgc, modfs, cutoff=50)
+        # Parameter trajectory smoothing
+        if hp_acoustic.mod_spec_smoothing:
+            hop_length = int(fs * (hp_acoustic.frame_period * 0.001))
+            modfs = fs / hop_length
+            mgc = P.modspec_smoothing(
+                mgc, modfs, cutoff=hp_acoustic.mod_spec_smoothing_cutoff)
 
         mgc = P.delta_features(mgc, hp_acoustic.windows)
         lf0 = P.delta_features(lf0, hp_acoustic.windows)

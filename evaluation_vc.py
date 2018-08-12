@@ -21,7 +21,7 @@ import pyworld
 
 import sys
 import os
-from os.path import splitext, join, abspath, basename
+from os.path import splitext, join, abspath, basename, exists
 
 from nnmnkwii import preprocessing as P
 from nnmnkwii.paramgen import unit_variance_mlpg_matrix
@@ -63,11 +63,28 @@ def test_vc_from_path(model, path, data_mean, data_std, diffvc=True):
     # Normalization
     mc_scaled = P.scale(mc, data_mean, data_std)
 
-    # Apply model
     mc_scaled = Variable(torch.from_numpy(mc_scaled))
+    lengths = [len(mc_scaled)]
+
+    # Add batch axis
+    mc_scaled = mc_scaled.view(1, -1, mc_scaled.size(-1))
+
+    # For MLPG
     R = unit_variance_mlpg_matrix(hp.windows, T)
     R = torch.from_numpy(R)
-    y_hat, y_hat_static = model(mc_scaled, R)
+
+    # Apply model
+    if model.include_parameter_generation():
+        # Case: models include parameter generation in itself
+        # Mulistream features cannot be used in this case
+        y_hat, y_hat_static = model(mc_scaled, R, lengths=lengths)
+    else:
+        # Case: generic models (can be sequence model)
+        assert hp.has_dynamic_features is not None
+        y_hat = model(mc_scaled, lengths=lengths)
+        y_hat_static = multi_stream_mlpg(
+            y_hat, R, hp.stream_sizes, hp.has_dynamic_features)
+
     mc_static_pred = y_hat_static.data.cpu().numpy().reshape(-1, static_dim)
 
     # Denormalize
@@ -144,8 +161,10 @@ if __name__ == "__main__":
     # 2. Test set
     eval_dir = join(outputs_dir, "eval")
     test_dir = join(outputs_dir, "test")
-    os.makedirs(eval_dir, exist_ok=True)
-    os.makedirs(test_dir, exist_ok=True)
+    if not exists(eval_dir):
+        os.makedirs(eval_dir)
+    if not exists(test_dir):
+        os.makedirs(test_dir)
     eval_files = get_wav_files(data_dir, wav_dir, test=False)
     test_files = get_wav_files(data_dir, wav_dir, test=True)
     for dst_dir, files in [(eval_dir, eval_files), (test_dir, test_files)]:
