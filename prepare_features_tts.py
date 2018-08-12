@@ -46,6 +46,8 @@ class LinguisticSource(FileDataSource):
     def collect_files(self):
         label_dir_name = "label_phone_align" if hp_acoustic.use_phone_alignment \
             else "label_state_align"
+        if not exists(join(self.data_root, label_dir_name)):
+            label_dir_name = "lab"
         files = sorted(glob(join(self.data_root, label_dir_name, "*.lab")))
         if self.max_files is not None and self.max_files > 0:
             return files[:self.max_files]
@@ -75,6 +77,8 @@ class DurationSource(FileDataSource):
     def collect_files(self):
         label_dir_name = "label_phone_align" if hp_duration.use_phone_alignment \
             else "label_state_align"
+        if not exists(join(self.data_root, label_dir_name)):
+            label_dir_name = "lab"
         files = sorted(glob(join(self.data_root, label_dir_name, "*.lab")))
         if self.max_files is not None and self.max_files > 0:
             return files[:self.max_files]
@@ -99,6 +103,8 @@ class AcousticSource(FileDataSource):
         wav_paths = sorted(glob(join(self.data_root, "wav", "*.wav")))
         label_dir_name = "label_phone_align" if hp_acoustic.use_phone_alignment \
             else "label_state_align"
+        if not exists(join(self.data_root, label_dir_name)):
+            label_dir_name = "lab"
         label_paths = sorted(glob(join(self.data_root, label_dir_name, "*.lab")))
         if self.max_files is not None and self.max_files > 0:
             return wav_paths[:self.max_files], label_paths[:self.max_files]
