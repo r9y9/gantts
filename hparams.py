@@ -108,18 +108,18 @@ tts_duration = tf.contrib.training.HParams(
     mask_nth_mgc_for_adv_loss=0,
 
     # Generator
-    generator="SRURNN",
+    generator="MLP",
     generator_add_noise=False,
     generator_noise_dim=200,
     generator_params={
         "in_dim": None,  # None wil be set automatically
         "out_dim": None,
-        "num_hidden": 6,
+        "num_hidden": 3,
         "hidden_dim": 512,
-        "bidirectional": True,
+        #        "bidirectional": True,
         "dropout": 0.0,
-        "use_relu": 1,
-        "rnn_dropout": 0.2,
+        #        "use_relu": 1,
+        #        "rnn_dropout": 0.2,
         "last_sigmoid": False,
     },
     optimizer_g="Adam",
@@ -131,13 +131,13 @@ tts_duration = tf.contrib.training.HParams(
 
     # Discriminator
     discriminator_linguistic_condition=True,
-    discriminator="MLP",
+    discriminator="LSTMRNN",
     discriminator_params={
         "in_dim": None,  # None wil be set automatically
         "out_dim": 1,
-        "num_hidden": 3,
+        "num_hidden": 2,
         "hidden_dim": 256,
-        # "bidirectional": True,
+        "bidirectional": True,
         "dropout": 0.0,
         "last_sigmoid": True,
     },
@@ -178,13 +178,13 @@ tts_acoustic = tf.contrib.training.HParams(
     frame_period=5,
     f0_floor=71.0,
     f0_ceil=700,
-    use_harvest=True,  # If False, use dio and stonemask
+    use_harvest=False,  # If False, use dio and stonemask
     windows=[
         (0, 0, np.array([1.0])),
         (1, 1, np.array([-0.5, 0.0, 0.5])),
         (1, 1, np.array([1.0, -2.0, 1.0])),
     ],
-    f0_interpolation_kind="quadratic",
+    f0_interpolation_kind="slinear",
     mod_spec_smoothing=True,
     mod_spec_smoothing_cutoff=50,  # Hz
 
@@ -207,16 +207,16 @@ tts_acoustic = tf.contrib.training.HParams(
     # Generator
     generator_add_noise=False,
     generator_noise_dim=200,
-    generator="SRURNN",
+    generator="LSTMRNN",
     generator_params={
         "in_dim": None,  # None wil be set automatically
         "out_dim": None,
-        "num_hidden": 6,
+        "num_hidden": 3,
         "hidden_dim": 512,
         "bidirectional": True,
         "dropout": 0.2,
-        "use_relu": 1,
-        "rnn_dropout": 0.2,
+        #        "use_relu": 1,
+        #        "rnn_dropout": 0.2,
         "last_sigmoid": False,
     },
     optimizer_g="Adagrad",
@@ -231,7 +231,7 @@ tts_acoustic = tf.contrib.training.HParams(
     discriminator_params={
         "in_dim": None,  # None wil be set automatically
         "out_dim": 1,
-        "num_hidden": 3,
+        "num_hidden": 2,
         "hidden_dim": 256,
         "dropout": 0.5,
         "last_sigmoid": True,
@@ -250,7 +250,7 @@ tts_acoustic = tf.contrib.training.HParams(
     lr_decay_epoch=25,
 
     # Datasets and data loader
-    batch_size=16,
+    batch_size=8,
     num_workers=1,
     pin_memory=True,
     cache_size=1200,
