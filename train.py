@@ -61,7 +61,7 @@ from hparams import hparams_debug_string
 hp = None  # to be initailized later
 
 global_epoch = 0
-test_size = 0.112  # 1000 training data for cmu arctic
+test_size = 0.02  # 1000 training data for cmu arctic
 random_state = 1234
 checkpoint_interval = 10
 

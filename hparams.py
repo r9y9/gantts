@@ -108,15 +108,15 @@ tts_duration = tf.contrib.training.HParams(
     mask_nth_mgc_for_adv_loss=0,
 
     # Generator
-    generator="MLP",
+    generator="LSTMRNN",
     generator_add_noise=False,
     generator_noise_dim=200,
     generator_params={
         "in_dim": None,  # None wil be set automatically
         "out_dim": None,
-        "num_hidden": 3,
+        "num_hidden": 4,
         "hidden_dim": 512,
-        #        "bidirectional": True,
+        "bidirectional": True,
         "dropout": 0.0,
         #        "use_relu": 1,
         #        "rnn_dropout": 0.2,
@@ -131,13 +131,13 @@ tts_duration = tf.contrib.training.HParams(
 
     # Discriminator
     discriminator_linguistic_condition=True,
-    discriminator="LSTMRNN",
+    discriminator="MLP",
     discriminator_params={
         "in_dim": None,  # None wil be set automatically
         "out_dim": 1,
-        "num_hidden": 2,
+        "num_hidden": 3,
         "hidden_dim": 256,
-        "bidirectional": True,
+        #        "bidirectional": True,
         "dropout": 0.0,
         "last_sigmoid": True,
     },
@@ -211,7 +211,7 @@ tts_acoustic = tf.contrib.training.HParams(
     generator_params={
         "in_dim": None,  # None wil be set automatically
         "out_dim": None,
-        "num_hidden": 3,
+        "num_hidden": 5,
         "hidden_dim": 512,
         "bidirectional": True,
         "dropout": 0.2,
@@ -231,7 +231,7 @@ tts_acoustic = tf.contrib.training.HParams(
     discriminator_params={
         "in_dim": None,  # None wil be set automatically
         "out_dim": 1,
-        "num_hidden": 2,
+        "num_hidden": 3,
         "hidden_dim": 256,
         "dropout": 0.5,
         "last_sigmoid": True,
