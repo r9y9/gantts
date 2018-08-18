@@ -48,7 +48,11 @@ class LinguisticSource(FileDataSource):
             else "label_state_align"
         if not exists(join(self.data_root, label_dir_name)):
             label_dir_name = "lab"
-        files = sorted(glob(join(self.data_root, label_dir_name, "*.lab")))
+        if exists(join(self.data_root, label_dir_name)):
+            label_dir = join(self.data_root, label_dir_name)
+        else:
+            label_dir = self.data_root
+        files = sorted(glob(join(label_dir, "*.lab")))
         if self.max_files is not None and self.max_files > 0:
             return files[:self.max_files]
         else:
@@ -79,7 +83,11 @@ class DurationSource(FileDataSource):
             else "label_state_align"
         if not exists(join(self.data_root, label_dir_name)):
             label_dir_name = "lab"
-        files = sorted(glob(join(self.data_root, label_dir_name, "*.lab")))
+        if exists(join(self.data_root, label_dir_name)):
+            label_dir = join(self.data_root, label_dir_name)
+        else:
+            label_dir = self.data_root
+        files = sorted(glob(join(label_dir, "*.lab")))
         if self.max_files is not None and self.max_files > 0:
             return files[:self.max_files]
         else:
@@ -100,12 +108,20 @@ class AcousticSource(FileDataSource):
         self.alpha = None
 
     def collect_files(self):
-        wav_paths = sorted(glob(join(self.data_root, "wav", "*.wav")))
+        if exists(join(self.data_root, "wav")):
+            wav_dir = join(self.data_root, "wav")
+        else:
+            wav_dir = self.data_root
+        wav_paths = sorted(glob(join(wav_dir, "*.wav")))
         label_dir_name = "label_phone_align" if hp_acoustic.use_phone_alignment \
             else "label_state_align"
         if not exists(join(self.data_root, label_dir_name)):
             label_dir_name = "lab"
-        label_paths = sorted(glob(join(self.data_root, label_dir_name, "*.lab")))
+        if exists(join(self.data_root, label_dir_name)):
+            label_dir = join(self.data_root, label_dir_name)
+        else:
+            label_dir = self.data_root
+        label_paths = sorted(glob(join(label_dir, "*.lab")))
         if self.max_files is not None and self.max_files > 0:
             return wav_paths[:self.max_files], label_paths[:self.max_files]
         else:
