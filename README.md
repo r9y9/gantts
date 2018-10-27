@@ -1,6 +1,8 @@
 # GAN TTS
 
 [![Build Status](https://travis-ci.org/r9y9/gantts.svg?branch=master)](https://travis-ci.org/r9y9/gantts)
+[![PyPI](https://img.shields.io/pypi/v/gantts.svg)](https://pypi.python.org/pypi/gantts)
+[![DOI](https://zenodo.org/badge/105146494.svg)](https://zenodo.org/badge/latestdoi/105146494)
 
 PyTorch implementation of Generative adversarial Networks (GAN) based text-to-speech (TTS) and voice conversion (VC).
 
