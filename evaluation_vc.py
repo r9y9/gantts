@@ -36,14 +36,11 @@ from hparams import vc as hp
 
 from train import NPYDataSource
 
-fs = 16000
-hop_length = int(fs * (hp.frame_period * 0.001))
 
-
-def test_vc_from_path(model, path, data_mean, data_std, diffvc=True):
+def test_vc_from_path(model, x, fs, data_mean, data_std, diffvc=True):
     model.eval()
 
-    fs, x = wavfile.read(path)
+    hop_length = int(fs * (hp.frame_period * 0.001))
     x = x.astype(np.float64)
     f0, timeaxis = pyworld.dio(x, fs, frame_period=hp.frame_period)
     f0 = pyworld.stonemask(x, f0, timeaxis, fs)
@@ -172,8 +169,9 @@ if __name__ == "__main__":
             print(dst_dir, path)
             name = splitext(basename(path))[0]
             dst_path = join(dst_dir, name + ".wav")
+            fs, x = wavfile.read(path)
             waveform, _, _ = test_vc_from_path(
-                model, path, data_mean, data_std, diffvc=diffvc)
+                model, x, fs, data_mean, data_std, diffvc=diffvc)
             wavfile.write(dst_path, fs, waveform.astype(np.int16))
 
     sys.exit(0)
