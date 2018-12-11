@@ -53,7 +53,7 @@ setup(name='gantts',
       },
       install_requires=[
           "numpy",
-          "torch >= 0.4.0",
+          "torch >= 0.4.1",
       ],
       extras_require={
           "train": [
