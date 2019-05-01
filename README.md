@@ -48,7 +48,7 @@ Though I haven't got improvements over Saito's approach [1] yet, but the GAN-bas
 Please install PyTorch, TensorFlow and SRU (if needed) first. Once you have those, then
 
 ```
-git clone --recursive https://github.com/r9y9/gantts & cd gantts
+git clone --recursive https://github.com/r9y9/gantts && cd gantts
 pip install -e ".[train]"
 ```
 
