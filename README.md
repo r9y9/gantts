@@ -40,6 +40,7 @@ Though I haven't got improvements over Saito's approach [1] yet, but the GAN-bas
 - [PyTorch](http://pytorch.org/) >= v0.2.0
 - [TensorFlow](https://www.tensorflow.org/) (just for `tf.contrib.training.HParams`)
 - [nnmnkwii](https://github.com/r9y9/nnmnkwii)
+- [PyWorld](https://github.com/JeremyCCHsu/Python-Wrapper-for-World-Vocoder)
 - https://github.com/taolei87/sru (if you want to try SRU-based models)
 - Python
 
