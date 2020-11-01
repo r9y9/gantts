@@ -153,7 +153,7 @@ class SRURNN(AbstractModel, nn.Module):
         self.num_direction = 2 if bidirectional else 1
         self.gru = SRU(in_dim, hidden_dim, num_hidden,
                        bidirectional=bidirectional, dropout=dropout,
-                       use_relu=use_relu, rnn_dropout=rnn_dropout)
+                       rnn_dropout=rnn_dropout)
         self.hidden2out = nn.Linear(hidden_dim * self.num_direction, out_dim)
         self.sigmoid = nn.Sigmoid()
         self.last_sigmoid = last_sigmoid
