@@ -147,7 +147,9 @@ class SRURNN(AbstractModel, nn.Module):
                  bidirectional=False, dropout=0, last_sigmoid=False,
                  use_relu=0, rnn_dropout=0.0):
         super(SRURNN, self).__init__()
-        from cuda_functional import SRU
+        # old line
+        #from cuda_functional import SRU
+        from sru import SRU
         self.num_direction = 2 if bidirectional else 1
         self.gru = SRU(in_dim, hidden_dim, num_hidden,
                        bidirectional=bidirectional, dropout=dropout,
